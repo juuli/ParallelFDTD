@@ -24,13 +24,13 @@ num_partition = 1
 
 src_type = 0 # 0: Hard, 1: Soft, 2: Transparent
 input_type = 1 # 0: Delta, 1: Gaussian, 2: Sine, 3: Given data
-
+input_data_idx = 0 
 src = [0.5, 0.5, 0.5]
  
 rec = [[0.6, 0.6, 0.6],
        [0.4, 0.4, 0.4]]
 
-visualization = False
+visualization = True
 captures = True
 
 ###############################################################################
@@ -43,7 +43,7 @@ captures = True
 # (in meters), and a list of triangle indices defining the geometry. 
 # Triangle indices have to start from 0.
 
-fp = "./jsaarelm_data/box.json"
+fp = "./Data/box.json"
 file_stream = open(fp)
 m = json.load(file_stream)    
 file_stream.close()
@@ -117,7 +117,7 @@ app.setDouble(double_precision)
 app.forcePartitionTo(num_partition);
 app.addSurfaceMaterials(materials.flatten().tolist(), num_triangles, num_coef)
 
-app.addSource(src[0], src[1], src[2], src_type, input_type)
+app.addSource(src[0], src[1], src[2], src_type, input_type, input_data_idx)
 
 for i in range(0, np.shape(rec)[0]):
   app.addReceiver(rec[i][0],rec[i][1],rec[i][2])
