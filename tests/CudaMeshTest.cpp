@@ -1,0 +1,578 @@
+#if !defined(WIN32)
+  #define BOOST_TEST_DYN_LINK
+#endif
+
+#define BOOST_TEST_MAIN
+
+#include <boost/test/unit_test.hpp>
+#include "../src/kernels/cudaMesh.h"
+#include "../src/kernels/voxelizationUtils.h"
+
+#include "../src/kernels/cudaUtils.h"
+#include "../src/kernels/kernels3d.h"
+#include "../src/base/GeometryHandler.h"
+#include "../src/io/FileReader.h"
+
+SimulationParameters parameters;
+MaterialHandler materials;
+GeometryHandler geometry;
+
+
+int count = 0;
+
+#define NUM_STEPS  1000
+#define PING(x) std::cout<<"Ping "<<x<<"! ("<<count<<")"<<std::endl;count++;
+
+extern "C" {
+  bool interruptCallbackLocal(){
+    if(false)
+      log_msg<LOG_INFO>(L"main: Execution interrupted");
+
+    return false;
+  }
+}
+
+extern "C" {
+  void progressCallbackLocal(int step, int max_step, float t_per_step ){
+    float estimate = t_per_step*(float)(max_step-step);
+    printf("Step %d/%d, time per step %f, estimated time left %f s \n", 
+           step, max_step, t_per_step, estimate);
+
+    return;
+  }
+}
+
+std::vector<unsigned int> getDebugDevices(int num_devices) {
+ std::vector<unsigned int> debug_devices;
+  for(int i = 0; i < num_devices; i++) {
+    debug_devices.push_back(i%2);
+    //std::cout<<"Debug device: "<<(i%2)<<std::endl;
+  }
+  return debug_devices;
+}
+
+CudaMesh* getTestMesh(unsigned int number_of_partitions) {
+  cudaSetDevice(0);
+  cudaDeviceReset();
+  cudaSetDevice(1);
+  cudaDeviceReset();
+
+  FileReader fr;
+  
+  if(!fr.readVTK(&geometry, "./Data/hytti.vtk"))
+    throw(-1);	
+  
+  materials.setGlobalMaterial(geometry.getNumberOfTriangles(), 0.5f);
+  parameters.setSpatialFs(10000);
+  parameters.setNumSteps(NUM_STEPS);
+  parameters.resetSourcesAndReceivers();
+
+  float dx = parameters.getDx();
+  // Add three sources and receivers, bottom, halo and top
+  // Mesh dim: x 128 y 96 z 49
+
+  parameters.addSource(Source( 2.f, 1.f, 3.f*dx, SRC_HARD));
+  parameters.addSource(Source( 2.f, 1.f, 23.f*dx, SRC_HARD));
+  parameters.addSource(Source( 2.f, 1.f, 40.f*dx, SRC_HARD));
+
+  parameters.addReceiver(Receiver( 3.f, 1.f, 5.f*dx));
+  parameters.addReceiver(Receiver( 3.f, 1.f, 24.f*dx));
+  parameters.addReceiver(Receiver( 3.f, 1.f, 42.f*dx));
+
+  parameters.setUpdateType(SRL_FORWARD);
+
+  unsigned char* d_position_idx = (unsigned char*)NULL;
+  unsigned char* d_material_idx = (unsigned char*)NULL;
+  uint3 voxelization_dim = make_uint3(0,0,0);
+
+  // Voxelize the geometry
+  voxelizeGeometry(geometry.getVerticePtr(), 
+                   geometry.getIndexPtr(), 
+                   materials.getMaterialIdxPtr(),
+                   geometry.getNumberOfTriangles(), 
+                   geometry.getNumberOfVertices(), 
+                   materials.getNumberOfUniqueMaterials(),
+                   parameters.getDx(),
+                   &d_position_idx,
+                   &d_material_idx,
+                   &voxelization_dim);
+
+  CudaMesh* cuda_mesh = new CudaMesh();
+    // Initialize the mesh
+  uint3 block_size = make_uint3(32,4,1); // this is a default block size used by the voxelizer
+  cuda_mesh->setupMesh(d_position_idx,
+                       d_material_idx,
+                       materials.getNumberOfUniqueMaterials(),
+                       materials.getMaterialCoefficientPtr(),
+                       parameters.getParameterPtr(),
+                       voxelization_dim,
+                       block_size,
+                       (unsigned int)parameters.getUpdateType());
+
+
+  cuda_mesh->makePartition(number_of_partitions, getDebugDevices(number_of_partitions));
+
+  return cuda_mesh;
+}
+
+CudaMesh* getTestMeshDouble(unsigned int number_of_partitions) {
+  cudaSetDevice(0);
+  cudaDeviceReset();
+  cudaSetDevice(1);
+  cudaDeviceReset();
+
+  FileReader fr;
+  
+  fr.readVTK(&geometry, "./Data/hytti.vtk");	
+  materials.setGlobalMaterial(geometry.getNumberOfTriangles(), 0.5f);
+
+  parameters.setSpatialFs(10000);
+  parameters.setNumSteps(NUM_STEPS);
+  parameters.resetSourcesAndReceivers();
+  float dx = parameters.getDx();
+  // Add three sources and receivers, bottom, halo and top
+  // Mesh dim: x 128 y 96 z 49
+
+  parameters.addSource(Source( 2.f, 1.f, 3.f*dx, SRC_HARD));
+  parameters.addSource(Source( 2.f, 1.f, 23.f*dx, SRC_HARD));
+  parameters.addSource(Source( 2.f, 1.f, 40.f*dx, SRC_HARD));
+
+  parameters.addReceiver(Receiver( 3.f, 1.f, 5.f*dx));
+  parameters.addReceiver(Receiver( 3.f, 1.f, 24.f*dx));
+  parameters.addReceiver(Receiver( 3.f, 1.f, 42.f*dx));
+
+
+  parameters.setUpdateType(SRL_FORWARD);
+
+  unsigned char* d_position_idx = (unsigned char*)NULL;
+  unsigned char* d_material_idx = (unsigned char*)NULL;
+  uint3 voxelization_dim = make_uint3(0,0,0);
+  // Voxelize the geometry
+  voxelizeGeometry(geometry.getVerticePtr(), 
+                   geometry.getIndexPtr(), 
+                   materials.getMaterialIdxPtr(),
+                    geometry.getNumberOfTriangles(), 
+                   geometry.getNumberOfVertices(), 
+                   materials.getNumberOfUniqueMaterials(),
+                   parameters.getDx(),
+                   &d_position_idx,
+                   &d_material_idx,
+                   &voxelization_dim);
+
+  CudaMesh* cuda_mesh = new CudaMesh();
+  cuda_mesh->setDouble(true);
+    // Initialize the mesh
+  uint3 block_size = make_uint3(32,4,1); // this is a default block size used by the voxelizer
+  cuda_mesh->setupMeshDouble(d_position_idx,
+                             d_material_idx,
+                             materials.getNumberOfUniqueMaterials(),
+                             materials.getMaterialCoefficientPtrDouble(),
+                             parameters.getParameterPtrDouble(),
+                             voxelization_dim,
+                             block_size,
+                            (unsigned int)parameters.getUpdateType());
+
+  cuda_mesh->makePartition(number_of_partitions, getDebugDevices(number_of_partitions));
+
+  return cuda_mesh;
+}
+
+BOOST_AUTO_TEST_SUITE(CudaMeshTest)
+
+BOOST_AUTO_TEST_CASE(CudaMesh_partition_idx) {
+  CudaMesh mesh;
+  std::vector< std::vector<unsigned int> > partitions;
+  std::vector< std::vector<unsigned int> > partitions1;
+  int dim_z = 100;
+  int num_partitions = 13;
+  int partition_size = dim_z/num_partitions;
+
+  partitions = mesh.getPartitionIndexing(num_partitions,dim_z);
+  partitions1 = mesh.getPartitionIndexing(1, dim_z);
+  BOOST_CHECK_EQUAL(partitions.size(), num_partitions);
+
+  // With more than 1 partitions, slices have to overlap
+  for(int i = 0; i < num_partitions; i++) {
+    int end_inc = 0;
+    int start_inc = 0;
+    if(i == 0) { end_inc = 1;}
+    if(i == (num_partitions-1)) { start_inc = 1;}
+    if(i!=0 && i!=(num_partitions-1)) { start_inc = 1; end_inc = 1;}
+    if(i == (num_partitions-1) && num_partitions>1) { end_inc = dim_z-(i+1)*partition_size;}
+
+    BOOST_CHECK_EQUAL(partitions.at(i).size(), dim_z/num_partitions+end_inc+start_inc);
+    //std::cout<<"Partition "<<i<<std::endl;
+    for(int j = 0; j < partitions.at(i).size(); j++) {
+      unsigned int slice = i*partition_size-start_inc+j;
+      BOOST_CHECK_EQUAL(partitions.at(i).at(j), slice);
+      //std::cout<<slice<<" ,";
+    }
+    //std::cout<<std::endl;
+  }  
+  
+  // If one partition, slices are from 0 to dim
+  BOOST_CHECK_EQUAL(partitions1.size(), 1);
+  for(int j = 0; j < partitions1.at(0).size(); j++) {
+    BOOST_CHECK_EQUAL(partitions1.at(0).at(j), j);
+  }
+}
+
+BOOST_AUTO_TEST_CASE(CudaMesh_set_get_utils) {
+  CudaMesh mesh;
+  uint3 voxelization_dim = make_uint3(20, 20, 20);
+  uint3 block_size = make_uint3(32,4,2);
+  unsigned int number_of_unique_materials(1);
+  std::vector<float> material_coefficients(20, 0.f);   
+  std::vector<float> parameter_ptr(10, 0.f);
+  unsigned int element_type = 0;
+
+  unsigned char* d_position_ptr = valueToDevice<unsigned char>(20*20*20, (unsigned char)0, 0);
+  unsigned char* d_material_ptr = valueToDevice<unsigned char>(20*20*20, (unsigned char)0, 0);
+
+  mesh.setupMesh(d_position_ptr,
+                 d_material_ptr,
+                 number_of_unique_materials,
+                 &material_coefficients[0],
+                   &parameter_ptr[0],
+                 voxelization_dim,
+                 block_size, 
+                 element_type);
+
+  int num_devices = 1;
+
+  std::vector<unsigned int> debug_devices = getDebugDevices(num_devices);
+  mesh.makePartition(num_devices, debug_devices);
+
+  BOOST_CHECK_EQUAL(mesh.pressures_.size(), num_devices);
+
+  int dev_i;
+  int elem;
+  mesh.getElementIdxAndDevice(10, 10, 10, &dev_i, &elem);
+
+  BOOST_CHECK_EQUAL(dev_i, 0);
+  BOOST_CHECK_EQUAL(elem, 10*20*32+10*32+10);
+  mesh.getElementIdxAndDevice(40, 10, 50, &dev_i, &elem);
+  BOOST_CHECK_EQUAL(elem, -1);
+  BOOST_CHECK_EQUAL(dev_i, -1);
+  mesh.destroyPartitions(); 
+}
+
+BOOST_AUTO_TEST_CASE(CudaMesh_get_set_multi) {
+  CudaMesh mesh;
+  int dim = 50;
+  uint3 voxelization_dim = make_uint3(dim, dim, dim);
+  uint3 block_size = make_uint3(1,1,1);
+  unsigned int number_of_unique_materials(1);
+  std::vector<float> material_coefficients(20, 0.f);   
+  std::vector<float> parameter_ptr(10, 0.f);
+  unsigned int element_type = 0;
+
+  unsigned char* d_position_ptr = valueToDevice<unsigned char>(dim*dim*dim, (unsigned char)0, 0);
+  unsigned char* d_material_ptr = valueToDevice<unsigned char>(dim*dim*dim, (unsigned char)0, 0);
+
+  mesh.setupMesh(d_position_ptr,
+                 d_material_ptr,
+                 number_of_unique_materials,
+                 &material_coefficients[0],
+                   &parameter_ptr[0],
+                 voxelization_dim,
+                 block_size, 
+                 element_type);
+
+
+  
+  BOOST_CHECK_EQUAL(mesh.getDimX(), dim);
+  BOOST_CHECK_EQUAL(mesh.getDimY(), dim);
+  BOOST_CHECK_EQUAL(mesh.getDimZ(), dim);
+
+  int num_devices = 5;
+  std::vector<unsigned int> debug_devices = getDebugDevices(num_devices);
+
+  mesh.makePartition(num_devices, debug_devices);
+
+  BOOST_CHECK_EQUAL(mesh.pressures_.size(), num_devices);
+
+  int dev_i;
+  int elem;
+  mesh.getElementIdxAndDevice(10, 10, 11, &dev_i, &elem);
+
+  BOOST_CHECK_EQUAL(dev_i, 1);
+  BOOST_CHECK_EQUAL(elem, 2*dim*dim+10*dim+10);
+
+  mesh.destroyPartitions();  
+}
+
+
+BOOST_AUTO_TEST_CASE(CudaMesh_test_1_partition) {
+  CudaMesh* mesh = getTestMesh(1);
+  mesh->setSample(3.0, 0,0,0);
+  float sample = mesh->getSample<float>(0,0,0);
+  BOOST_CHECK_EQUAL(sample, 3.0);
+  mesh->addSample(3.f, 0,0,0);
+  sample = mesh->getSample<float>(0,0,0);
+  
+  BOOST_CHECK_EQUAL(sample, 6.f);
+
+  mesh->setSample(1.f, 27, 27, 27);
+  sample = mesh->getSample<float>(27,27, 27);
+  BOOST_CHECK_EQUAL(sample, 1.f);
+  
+
+  mesh->destroyPartitions();
+  delete mesh;
+}
+
+
+BOOST_AUTO_TEST_CASE(CudaMesh_test_2_partitions) {
+  
+  CudaMesh* mesh = getTestMesh(2);
+  
+  BOOST_CHECK_EQUAL(mesh->getNumberOfPartitions(), 2);
+
+  unsigned int num_elems = mesh->getNumberOfElements();
+  
+  mesh->setSample<float>(3.f, 0,0,0);
+  float sample = mesh->getSample<float>(0,0,0);
+  BOOST_CHECK_EQUAL(sample, 3.f);
+  
+  mesh->addSample<float>(3.f, 0,0,0);
+  sample = mesh->getSample<float>(0,0,0);
+  BOOST_CHECK_EQUAL(sample, 6.f);
+
+  mesh->setSample<float>(1.f, 27, 27, 27);
+  sample = mesh->getSample<float>(27,27, 27);
+  BOOST_CHECK_EQUAL(sample, 1.f);
+  
+  // Samples to halos
+  mesh->setSample<float>(1.f, 2, 0, 23);
+  mesh->setSample<float>(89.f, 6, 0, 24);
+  
+  // Fetch the samples from 1st partition
+  sample = mesh->getSampleAt<float>(2,0,23,0);
+  BOOST_CHECK_EQUAL(sample, 1.f);
+  sample = mesh->getSampleAt<float>(6,0,24,0);
+  BOOST_CHECK_EQUAL(sample, 89.f);
+  
+  // Fetch the samples from 2nd partition
+  sample = mesh->getSampleAt<float>(2,0,0,1);
+  BOOST_CHECK_EQUAL(sample, 1.f);
+  sample = mesh->getSampleAt<float>(6,0,1,1);
+  BOOST_CHECK_EQUAL(sample, 89.f);
+
+  // Test halo switch
+  sample = 0.f;
+  // set sample to the second slice of second partition
+  mesh->setSampleAt<float>(8.f, 2,0,1,1);
+  // set sample to the second last slice of first partition
+  mesh->setSampleAt<float>(45.f, 3,0,23,0);
+  mesh->switchHalos();
+
+  // last slice of the first should have the sample of second partition
+  sample = mesh->getSampleAt<float>(2,0,24,0);
+  BOOST_CHECK_EQUAL(sample, 8.f);
+  // first slice of second partition should have the sample from first partition
+  sample = mesh->getSampleAt<float>(3,0,0,1);
+  BOOST_CHECK_EQUAL(sample, 45.f);
+  
+  float sum = 0.f;
+
+  
+  if(!IGNORE_CHECKSUMS) {
+    sum = printCheckSum(mesh->getPressurePtrAt(0), mesh->getPartitionSize(), "mesh test partition 0");
+    BOOST_CHECK_EQUAL(sum, 6.f);
+    sum = printCheckSum(mesh->getPressurePtrAt(1), mesh->getPartitionSize(), "mesh test partition 1");
+    BOOST_CHECK_EQUAL(sum, 1.f);
+  
+    mesh->flipPressurePointers();
+    mesh->switchHalos();
+    sum = printCheckSum(mesh->getPressurePtrAt(0), mesh->getPartitionSize(), "mesh test partition 0");
+    BOOST_CHECK_EQUAL(sum, 0.f);
+    sum = printCheckSum(mesh->getPressurePtrAt(1), mesh->getPartitionSize(), "mesh test partition 1");
+    BOOST_CHECK_EQUAL(sum, 0.f);
+  }
+
+
+  mesh->destroyPartitions();
+  delete mesh;
+}
+
+
+BOOST_AUTO_TEST_CASE(CudaMesh_test_2_partitions_double) {
+  
+  CudaMesh* mesh = getTestMeshDouble(2);
+
+  BOOST_CHECK_EQUAL(mesh->getNumberOfPartitions(), 2);
+
+  unsigned int num_elems = mesh->getNumberOfElements();
+
+  mesh->setSample<double>(3, 0,0,0);
+  double sample = mesh->getSample<double>(0,0,0);
+  BOOST_CHECK_EQUAL(sample, 3);
+
+  mesh->addSample<double>(3, 0,0,0);
+  sample = mesh->getSample<double>(0,0,0);
+  BOOST_CHECK_EQUAL(sample, 6);
+
+  mesh->setSample<double>(1, 27, 27, 27);
+  sample = mesh->getSample<double>(27,27, 27);
+  BOOST_CHECK_EQUAL(sample, 1);
+  
+  // Samples to halos
+  mesh->setSample<double>(1, 2, 0, 23);
+  mesh->setSample<double>(89, 6, 0, 24);
+
+  // Fetch the samples from 1st partition
+  sample = mesh->getSampleAt<double>(2,0,23,0);
+  BOOST_CHECK_EQUAL(sample, 1.f);
+  sample = mesh->getSampleAt<double>(6,0,24,0);
+  BOOST_CHECK_EQUAL(sample, 89.f);
+  // Fetch the samples from 2nd partition
+  sample = mesh->getSampleAt<double>(2,0,0,1);
+  BOOST_CHECK_EQUAL(sample, 1.f);
+  sample = mesh->getSampleAt<double>(6,0,1,1);
+  BOOST_CHECK_EQUAL(sample, 89.f);
+
+  // Test halo switch
+  sample = 0;
+  // set sample to the second slice of second partition
+  mesh->setSampleAt<double>(8, 2,0,1,1);
+  // set sample to the second last slice of first partition
+  mesh->setSampleAt<double>(45, 3,0,23,0);
+  mesh->switchHalos();
+
+  // last slice of the first should have the sample of second partition
+  sample = mesh->getSampleAt<double>(2,0,24,0);
+  BOOST_CHECK_EQUAL(sample, 8.f);
+  // first slice of second partition should have the sample from first partition
+  sample = mesh->getSampleAt<double>(3,0,0,1);
+  BOOST_CHECK_EQUAL(sample, 45.f);
+  
+  float sum = 0.f;
+
+  
+  if(!IGNORE_CHECKSUMS) {
+    sum = printCheckSum(mesh->getPressurePtrAt(0), mesh->getPartitionSize(), "mesh test partition 0");
+    BOOST_CHECK_EQUAL(sum, 6.f);
+    sum = printCheckSum(mesh->getPressurePtrAt(1), mesh->getPartitionSize(), "mesh test partition 1");
+    BOOST_CHECK_EQUAL(sum, 1.f);
+  
+    mesh->flipPressurePointers();
+    mesh->switchHalos();
+    sum = printCheckSum(mesh->getPressurePtrAt(0), mesh->getPartitionSize(), "mesh test partition 0");
+    BOOST_CHECK_EQUAL(sum, 0.f);
+    sum = printCheckSum(mesh->getPressurePtrAt(1), mesh->getPartitionSize(), "mesh test partition 1");
+    BOOST_CHECK_EQUAL(sum, 0.f);
+  }
+
+  mesh->destroyPartitions();
+  delete mesh;
+}
+
+
+BOOST_AUTO_TEST_CASE(CudaMesh_Run_single) {
+  
+  // Run single partition simulation
+  CudaMesh* mesh1 = getTestMesh(1);
+
+  float* ret1 = new float[parameters.getNumSteps()*parameters.getNumReceivers()];
+  launchFDTD3d(mesh1, &parameters, ret1, interruptCallbackLocal, progressCallbackLocal);
+  mesh1->destroyPartitions();
+
+  delete mesh1;
+
+  // Run two partition simulations
+  CudaMesh* mesh2 = getTestMesh(2);
+
+  float* ret2 = new float[parameters.getNumSteps()*parameters.getNumReceivers()];
+
+  launchFDTD3d(mesh2, &parameters, ret2, interruptCallbackLocal, progressCallbackLocal);
+  mesh2->destroyPartitions();
+
+  delete mesh2;
+
+  // Simulate 5 partitio simulation
+  CudaMesh* mesh3 = getTestMesh(5);
+
+  float* ret3 = new float[parameters.getNumSteps()*parameters.getNumReceivers()];
+
+  launchFDTD3d(mesh3, &parameters, ret3, interruptCallbackLocal, progressCallbackLocal);
+
+  mesh3->destroyPartitions();
+  delete mesh3;
+ 
+  // Check results
+  bool check = true;
+  float sum1 = 0;
+  float sum2 = 0;
+  float sum3 = 0;
+  for(unsigned int i = 0; i < parameters.getNumSteps(); i++) {
+    sum1 += ret1[i];    sum2 += ret2[i];    sum3 += ret3[i];
+    //if(ret1[i]!= 0)
+    //	printf("data  found step %u r1 %f r2 %f r3 %f\n",i, ret1[i], ret2[i], ret3[i]);
+    if(ret1[i] != ret2[i] )
+      check = false;
+    if(ret1[i] != ret3[i])
+      check = false;
+  }
+
+  BOOST_CHECK_EQUAL(check, true);
+  
+  delete[] ret1;
+  delete[] ret2;
+  delete[] ret3;
+
+}
+
+BOOST_AUTO_TEST_CASE(CudaMesh_Run_single_double_core_double) {
+  
+  // Run single partition simulation
+  CudaMesh* mesh1 = getTestMeshDouble(1);
+
+  double* ret1 = new double[parameters.getNumSteps()*parameters.getNumReceivers()];
+  launchFDTD3dDouble(mesh1, &parameters, ret1, interruptCallbackLocal, progressCallbackLocal);
+
+  mesh1->destroyPartitions();
+  delete mesh1;
+
+  // Run two partition simulations
+  CudaMesh* mesh2 = getTestMeshDouble(2);
+
+  double* ret2 = new double[parameters.getNumSteps()*parameters.getNumReceivers()];
+
+  launchFDTD3dDouble(mesh2, &parameters, ret2, interruptCallbackLocal, progressCallbackLocal);
+
+  mesh2->destroyPartitions();
+  delete mesh2;
+  
+  // Simulate 5 partitio simulation
+  CudaMesh* mesh3 = getTestMeshDouble(5);
+
+  double* ret3 = new double[parameters.getNumSteps()*parameters.getNumReceivers()];
+
+  launchFDTD3dDouble(mesh3, &parameters, ret3, interruptCallbackLocal, progressCallbackLocal);
+
+  mesh3->destroyPartitions();
+  delete mesh3;
+  double sum1 = 0;
+  double sum2 = 0;
+  double sum3 = 0;
+  // Check results
+  bool check = true;
+  for(unsigned int i = 0; i < parameters.getNumSteps(); i++) {
+    sum1 += ret1[i];    sum2 += ret2[i];    sum3 += ret3[i];
+    if(ret1[i] != ret2[i])
+      check = false;
+    if(ret1[i] != ret3[i])
+      check = false;
+  }
+
+  std::cout<<"sum1 "<<sum1<<" sum2 "<<sum2<<" sum 3 " <<sum3<<std::endl;
+  BOOST_CHECK_EQUAL(check, true);
+  
+  delete[] ret1;
+  delete[] ret2;
+  delete[] ret3;
+}
+/*
+*/
+BOOST_AUTO_TEST_SUITE_END()
