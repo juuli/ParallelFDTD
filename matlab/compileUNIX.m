@@ -39,6 +39,7 @@ compile_command = ['mex -I"' glutIncludePath '" ', ...
 % Compile
 eval([compile_command ' device_reset.cpp ']);
 eval([compile_command ' mex_FDTD.cpp']);
+eval([compile_command ' mem_check.cpp']);
 
 fprintf('Compile done\n');
 clear all
