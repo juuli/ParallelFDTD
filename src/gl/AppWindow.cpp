@@ -573,7 +573,7 @@ void AppWindow::drawStatusText() {
   drawString3D(ss.str().c_str(), nv::Vec3f(10,top,0), nv::Vec3f(0,0,0), NULL);
   ss.str(std::string());
   top -=increment;
-  ss<<"Spatial fs: "<<currentApp->m_parameters.getSpatialFs();
+  ss<<"Fs: "<<currentApp->m_parameters.getSpatialFs();
   drawString3D(ss.str().c_str(), nv::Vec3f(10,top,0), nv::Vec3f(0,0,0), NULL);
   ss.str(std::string());
   top -=increment;
