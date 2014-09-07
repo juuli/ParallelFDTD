@@ -117,4 +117,3 @@ The simulation tool does not rely on any specific CAD format. Any format which y
 
 ### Run the simulation
 The details of running simulations are reviewed in the scripts matlab/testBench.m for matlab, and python/testBench.py for Python.
-
