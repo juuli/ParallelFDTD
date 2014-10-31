@@ -362,7 +362,7 @@ public:
       T domain_smp = 0;
       T* dest = domain.at(i)+getElementIndex(x, y, z-first);
       cudasafe(cudaMemcpy(&domain_smp, dest, sizeof(T), cudaMemcpyDeviceToHost), "addSample T : Memcopy To Host");
-      sample+=domain_smp;
+      domain_smp+=sample;
       cudasafe(cudaMemcpy(dest, &sample, sizeof(T), cudaMemcpyHostToDevice), "addSample T : Memcopy To Device");
         
     }  
