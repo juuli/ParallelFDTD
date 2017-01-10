@@ -56,5 +56,5 @@ solver_log.txt
 *.lai
 *.la
 *.a
-
+*.gch
 
