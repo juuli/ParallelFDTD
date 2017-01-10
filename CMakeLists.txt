@@ -3,29 +3,29 @@ CMAKE_MINIMUM_REQUIRED(VERSION 2.8)
 
 project(parallelFDTD)
 
-set(SOURCES_CPP ${CMAKE_SOURCE_DIR}/src/base/GeometryHandler.cpp 
+set(SOURCES_CPP ${CMAKE_SOURCE_DIR}/src/base/GeometryHandler.cpp
                 ${CMAKE_SOURCE_DIR}/src/base/cameraProto.cpp
-                ${CMAKE_SOURCE_DIR}/src/base/MaterialHandler.cpp 
-                ${CMAKE_SOURCE_DIR}/src/base/SimulationParameters.cpp 
+                ${CMAKE_SOURCE_DIR}/src/base/MaterialHandler.cpp
+                ${CMAKE_SOURCE_DIR}/src/base/SimulationParameters.cpp
                 ${CMAKE_SOURCE_DIR}/src/base/SrcRec.cpp
-                ${CMAKE_SOURCE_DIR}/src/gl/AppPbo.cpp 
-                ${CMAKE_SOURCE_DIR}/src/gl/AppVbo.cpp 
-                ${CMAKE_SOURCE_DIR}/src/gl/AppWindow.cpp 
+                ${CMAKE_SOURCE_DIR}/src/gl/AppPbo.cpp
+                ${CMAKE_SOURCE_DIR}/src/gl/AppVbo.cpp
+                ${CMAKE_SOURCE_DIR}/src/gl/AppWindow.cpp
                 ${CMAKE_SOURCE_DIR}/src/gl/glHelpers.cpp
-                ${CMAKE_SOURCE_DIR}/src/io/FileReader.cpp 
+                ${CMAKE_SOURCE_DIR}/src/io/FileReader.cpp
                 ${CMAKE_SOURCE_DIR}/src/io/Image.cpp
-                ${CMAKE_SOURCE_DIR}/src/App.cpp 
+                ${CMAKE_SOURCE_DIR}/src/App.cpp
                 ${CMAKE_SOURCE_DIR}/src/logger.cpp )
 
-set(SOURCES_CU ${CMAKE_SOURCE_DIR}/src/kernels/cudaUtils.cu 
-               ${CMAKE_SOURCE_DIR}/src/kernels/visualizationUtils.cu 
-               ${CMAKE_SOURCE_DIR}/src/kernels/voxelizationUtils.cu 
+set(SOURCES_CU ${CMAKE_SOURCE_DIR}/src/kernels/cudaUtils.cu
+               ${CMAKE_SOURCE_DIR}/src/kernels/visualizationUtils.cu
+               ${CMAKE_SOURCE_DIR}/src/kernels/voxelizationUtils.cu
                ${CMAKE_SOURCE_DIR}/src/kernels/cudaMesh.cu
                ${CMAKE_SOURCE_DIR}/src/kernels/kernels3d.cu )
 
 set( GENERATE_DOXYGEN_DOCS OFF )
-         
-set( Boost_USE_STATIC_LIBS ON )
+
+set( Boost_USE_STATIC_LIBS OFF )
 set( Boost_USE_MULTITHREADED ON )
 set( Boost_USE_STATIC_RUNTIME OFF )
 set( Boost_NO_BOOST_CMAKE ON )
@@ -54,9 +54,9 @@ find_package( PythonLibs REQUIRED)
 
 # Example directories for macports installs
 if(APPLE)
-  set(GLUT_INCLUDE_DIR /opt/X11/include/GL) 
+  set(GLUT_INCLUDE_DIR /opt/X11/include/GL)
   set(GLUT_glut_LIBRARY /opt/X11/lib/libglut.dylib)
-  
+
   link_directories(/opt/local/lib)
   link_directories(/opt/x11/lib)
 endif()
@@ -64,7 +64,7 @@ endif()
 if(UNIX)
   find_library(GLEW_LIBRARIES libGLEW.so /usr/lib/x86_64-linux-gnu/)
   link_directories(/usr/local/lib)
-  set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -m64 -fPIC -O3 -DBOOST_NOINLINE='__attribute__ ((noinline))' -DBOOST_PYTHON_DYNAMIC_MODULE")
+  set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -m64 -fPIC -O3 -DBOOST_PYTHON_DYNAMIC_MODULE")
   set(unix_specific_libraries pthread rt)
 endif()
 
@@ -89,20 +89,20 @@ if(Boost_USE_STATIC_RUNTIME)
   endforeach(flag_var)
 endif()
 
-set( CUDA_NVCC_FLAGS_RELEASE ${CUDA_NVCC_FLAGS_RELEASE}; 
-                             -gencode arch=compute_30,code=sm_30 
+set( CUDA_NVCC_FLAGS_RELEASE ${CUDA_NVCC_FLAGS_RELEASE};
+                             -gencode arch=compute_30,code=sm_30
                              -gencode arch=compute_35,code=sm_35
                              -gencode arch=compute_20,code=sm_20
                              -gencode arch=compute_20,code=sm_50
                              )
 
-set( CUDA_NVCC_FLAGS_DEBUG ${CUDA_NVCC_FLAGS_DEBUG}; 
-                             -gencode arch=compute_30,code=sm_30 
+set( CUDA_NVCC_FLAGS_DEBUG ${CUDA_NVCC_FLAGS_DEBUG};
+                             -gencode arch=compute_30,code=sm_30
                              -gencode arch=compute_35,code=sm_35
                              -gencode arch=compute_20,code=sm_20
                              -gencode arch=compute_20,code=sm_50
                              )
-                             
+
 include_directories( ${OPENGL_INCLUDE_DIR} )
 include_directories( ${Boost_INCLUDE_DIRS} )
 include_directories( ${GLUT_INCLUDE_DIR} )
@@ -116,7 +116,7 @@ message( STATUS "Boost include dir: ${Boost_INCLUDE_DIRS}" )
 message( STATUS "GLUT include dir: ${GLUT_INCLUDE_DIR}" )
 message( STATUS "GLEW include dirs: ${GLEW_INCLUDE_DIRS}" )
 message( STATUS "Voxelizer include dir: ${VOXELIZER_INCLUDE_DIR}" )
-message( STATUS "Python: ${PYTHON_INCLUDE_DIRS}" )	
+message( STATUS "Python: ${PYTHON_INCLUDE_DIRS}" )
 
 message( STATUS "GLUT lib: ${GLUT_glut_LIBRARY}" )
 message( STATUS "OpenGL lib: ${OPENGL_gl_LIBRARY}" )
@@ -124,7 +124,7 @@ message( STATUS "Boost lib: ${Boost_LIBRARIES}" )
 message( STATUS "Boost python lib: ${Boost_PYTHON_LIBRARY}" )
 message( STATUS "GLEW libs: ${GLEW_LIBRARIES}" )
 message( STATUS "Voxelizer lib: ${VOXELIZER_LIB}" )
-message( STATUS "Python lib: ${PYTHON_LIBRARIES}" )	
+message( STATUS "Python lib: ${PYTHON_LIBRARIES}" )
 
 message( STATUS "Doxygen ${GENERATE_DOXYGEN_DOCS}")
 
