@@ -1,21 +1,28 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8)
 #The name of the project
 
+# In case one needs to force a compiler, use these ones:
+# set(CMAKE_CXX_COMPILER "/_path_to_bin/g++")
+# set(CMAKE_C_COMPILER "/_path_to_bin/...")
+
 project(parallelFDTD)
 
 set(SOURCES_CPP ${CMAKE_SOURCE_DIR}/src/base/GeometryHandler.cpp
-                ${CMAKE_SOURCE_DIR}/src/base/cameraProto.cpp
                 ${CMAKE_SOURCE_DIR}/src/base/MaterialHandler.cpp
                 ${CMAKE_SOURCE_DIR}/src/base/SimulationParameters.cpp
                 ${CMAKE_SOURCE_DIR}/src/base/SrcRec.cpp
-                ${CMAKE_SOURCE_DIR}/src/gl/AppPbo.cpp
-                ${CMAKE_SOURCE_DIR}/src/gl/AppVbo.cpp
-                ${CMAKE_SOURCE_DIR}/src/gl/AppWindow.cpp
-                ${CMAKE_SOURCE_DIR}/src/gl/glHelpers.cpp
                 ${CMAKE_SOURCE_DIR}/src/io/FileReader.cpp
                 ${CMAKE_SOURCE_DIR}/src/io/Image.cpp
                 ${CMAKE_SOURCE_DIR}/src/App.cpp
                 ${CMAKE_SOURCE_DIR}/src/logger.cpp )
+
+if(BUILD_VISUALIZATION)
+  set(SOURCES_CPP ${SOURCES_CPP} ${CMAKE_SOURCE_DIR}/src/gl/AppWindow.cpp
+                                 ${CMAKE_SOURCE_DIR}/src/gl/AppPbo.cpp
+                                 ${CMAKE_SOURCE_DIR}/src/gl/AppVbo.cpp
+                                 ${CMAKE_SOURCE_DIR}/src/gl/glHelpers.cpp
+                                 ${CMAKE_SOURCE_DIR}/src/base/cameraProto.cpp)
+endif()
 
 set(SOURCES_CU ${CMAKE_SOURCE_DIR}/src/kernels/cudaUtils.cu
                ${CMAKE_SOURCE_DIR}/src/kernels/visualizationUtils.cu
@@ -34,6 +41,7 @@ set( Boost_NO_BOOST_CMAKE ON )
 #set( BOOST_ROOT "C:/Program Files/boost/boost_1_55_0" )
 #set( Boost_INCLUDE_DIRS ${BOOST_ROOT})
 #set( BOOST_LIBRARYDIR ${BOOST_ROOT}/lib)
+set( BOOST_LIBRARYDIR /usr/lib64)
 
 if(WIN32)
   find_package( Boost 1.41 REQUIRED COMPONENTS system thread date_time chrono python unit_test_framework)
@@ -43,10 +51,21 @@ if(UNIX)
   find_package( Boost 1.41 REQUIRED COMPONENTS system thread date_time python unit_test_framework)
 endif()
 
-find_package( OpenGL REQUIRED )
+if(BUILD_VISUALIZATION)
+  add_definitions(-DCOMPILE_VISUALIZATION)
+  find_package( OpenGL REQUIRED )
+  find_package( GLUT REQUIRED )
+  find_package( GLEW REQUIRED )
+  if(UNIX)
+    find_library(GLEW_LIBRARIES libGLEW.so /usr/lib/x86_64-linux-gnu/)
+  endif()
+else()
+  set(GLUT_LIBRARIES "")
+  set(OPENGL_LIBRARIES "")
+  set(GLEW_LIBRARIES "")
+endif()
+
 find_package( CUDA REQUIRED )
-find_package( GLUT REQUIRED )
-find_package( GLEW REQUIRED )
 find_package( PythonLibs REQUIRED)
 
 # MAC and LINUX: explicitly use x11 GL
@@ -92,15 +111,15 @@ endif()
 set( CUDA_NVCC_FLAGS_RELEASE ${CUDA_NVCC_FLAGS_RELEASE};
                              -gencode arch=compute_30,code=sm_30
                              -gencode arch=compute_35,code=sm_35
+                             -gencode arch=compute_37,code=sm_37
                              -gencode arch=compute_20,code=sm_20
-                             -gencode arch=compute_20,code=sm_50
                              )
 
 set( CUDA_NVCC_FLAGS_DEBUG ${CUDA_NVCC_FLAGS_DEBUG};
                              -gencode arch=compute_30,code=sm_30
                              -gencode arch=compute_35,code=sm_35
+                             -gencode arch=compute_37,code=sm_37
                              -gencode arch=compute_20,code=sm_20
-                             -gencode arch=compute_20,code=sm_50
                              )
 
 include_directories( ${OPENGL_INCLUDE_DIR} )
@@ -109,7 +128,9 @@ include_directories( ${GLUT_INCLUDE_DIR} )
 include_directories( ${GLEW_INCLUDE_DIRS} )
 include_directories( ${VOXELIZER_INCLUDE_DIR} )
 include_directories( ${PYTHON_INCLUDE_DIRS} )
+include_directories(${CMAKE_SOURCE_DIR}/include)
 
+message( STATUS "CUDA root: ${CUDA_TOOLKIT_ROOT_DIR}")
 message( STATUS "Voxelizer ROOT: ${VOXELIZER_ROOT}" )
 message( STATUS "OpenGL include dir: ${OPENGL_INCLUDE_DIR}" )
 message( STATUS "Boost include dir: ${Boost_INCLUDE_DIRS}" )
@@ -125,6 +146,15 @@ message( STATUS "Boost python lib: ${Boost_PYTHON_LIBRARY}" )
 message( STATUS "GLEW libs: ${GLEW_LIBRARIES}" )
 message( STATUS "Voxelizer lib: ${VOXELIZER_LIB}" )
 message( STATUS "Python lib: ${PYTHON_LIBRARIES}" )
+
+message( STATUS "CMAKE_C_COMPILER_VERSION : ${CMAKE_C_COMPILER_VERSION}" )
+message( STATUS "CMAKE_CXX_COMPILER_VERSION : ${CMAKE_CXX_COMPILER_VERSION}" )
+
+message( STATUS "CMAKE_C_COMPILER_VERSION : ${CMAKE_C_COMPILER_VERSION}" )
+message( STATUS "CMAKE_CXX_COMPILER_VERSION : ${CMAKE_CXX_COMPILER_VERSION}" )
+
+message( STATUS "CMAKE_C_COMPILER_VERSION : ${CMAKE_C_COMPILER_VERSION}" )
+message( STATUS "CMAKE_CXX_COMPILER_VERSION : ${CMAKE_CXX_COMPILER_VERSION}" )
 
 message( STATUS "Doxygen ${GENERATE_DOXYGEN_DOCS}")
 

@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 //
 // This file is a part of the PadallelFDTD Finite-Difference Time-Domain
-// simulation library. It is released under the MIT License. You should have 
+// simulation library. It is released under the MIT License. You should have
 // received a copy of the MIT License along with ParallelFDTD.  If not, see
 // http://www.opensource.org/licenses/mit-license.php
 //
@@ -23,6 +23,9 @@
 
 
 void loggerInit() {
-	std::wofstream logfile("solver_log.txt",  std::fstream::out | std::fstream::trunc);
+  std::wofstream logfile((boost::asio::ip::host_name() + "_solver_log.log").c_str(),  std::fstream::out | std::fstream::trunc);
 }
 
+void loggerInit(const char* logger_file_name) {
+  std::wofstream logfile(logger_file_name,  std::fstream::out | std::fstream::trunc);
+}

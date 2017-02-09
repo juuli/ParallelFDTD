@@ -1,3 +1,4 @@
+
 cuda_add_executable(AppTest ./AppTest.cpp ${SOURCES_CPP} ${SOURCES_CU} )
 cuda_add_executable(CudaMeshTest ./CudaMeshTest.cpp ${SOURCES_CPP} ${SOURCES_CU} )
 cuda_add_executable(CudaUtilsTest ./CudaUtilsTest.cpp ${SOURCES_CPP} ${SOURCES_CU} )
@@ -50,3 +51,7 @@ target_link_libraries( VoxelizerTest ${GLUT_LIBRARIES} ${OPENGL_LIBRARIES} ${GLE
                                     ${Boost_THREAD_LIBRARY} ${Boost_SYSTEM_LIBRARY}
                                     ${Boost_DATE_TIME_LIBRARY} ${unix_specific_libraries}
                                     ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY})
+#set_target_properties( CudaMeshTest PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/ )
+#set_target_properties( CudaUtilsTest PROPERTIES ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/ )
+#set_target_properties( FileReaderTest PROPERTIES ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/ )
+#set_target_properties( GeometryHandlerTest PROPERTIES ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/ )

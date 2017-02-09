@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 //
 // This file is a part of the PadallelFDTD Finite-Difference Time-Domain
-// simulation library. It is released under the MIT License. You should have 
+// simulation library. It is released under the MIT License. You should have
 // received a copy of the MIT License along with ParallelFDTD.  If not, see
 // http://www.opensource.org/licenses/mit-license.php
 //
@@ -24,8 +24,8 @@
 #include "../global_includes.h"
 
 
-void MaterialHandler::addMaterials(float* material_ptr, 
-                                   unsigned int number_of_surfaces, 
+void MaterialHandler::addMaterials(float* material_ptr,
+                                   unsigned int number_of_surfaces,
                                    unsigned int number_of_coefficients) {
   std::vector<float> temp_coefficients;
   log_msg<LOG_INFO>(L"MaterialHandler::addMaterials - num surfaces %d num coef %d")
@@ -38,18 +38,31 @@ void MaterialHandler::addMaterials(float* material_ptr,
     // Save the number of coefficients defined
     for(unsigned int j = 0; j < number_of_coefficients; j++) {
       temp_coefficients.at(j) = material_ptr[i*number_of_coefficients+j];
-      
+
     }
     this->addSurfaceMaterial(temp_coefficients);
+  }
+}
+
+void MaterialHandler::setGlobalMaterial(unsigned int number_of_surfaces, float coef) {
+  log_msg<LOG_DEBUG>
+    (L"MaterialHandler::setGlobalMaterial - assigning %d surfaces with coefficient %f")
+    %number_of_surfaces %coef;
+
+  std::vector<float> mat;
+  mat.assign(MATERIAL_COEF_NUM, coef);
+  for(unsigned int i = 0; i < number_of_surfaces; i++) {
+    this->addSurfaceMaterial(mat);
   }
 }
 
 unsigned int MaterialHandler::addSurfaceMaterial(std::vector<float> material_coefficients) {
   unsigned int vec_size = (unsigned int)material_coefficients.size();
   unsigned int coef_num = this->number_of_coefficients_;
-  
+
   if(coef_num != vec_size)
-    log_msg<LOG_ERROR>(L"MaterialHandler::addSurfaceMaterial - invalid number of coefficients %d, sould be %d") 
+    log_msg<LOG_ERROR>(L"MaterialHandler::addSurfaceMaterial - invalid number"
+                       L"of coefficients %d, sould be %d")
                        %coef_num %MATERIAL_COEF_NUM;
 
   while(material_coefficients.size() <= MATERIAL_COEF_NUM)
@@ -59,7 +72,9 @@ unsigned int MaterialHandler::addSurfaceMaterial(std::vector<float> material_coe
   unsigned int material_idx = 0;
   material_idx = this->checkIfUnique(material_coefficients);
 
-  this->material_indices_.push_back((unsigned char)material_idx);
+  // The material index list starts from this->material_index_increment_
+  // This is done to accomodate surface voxelization material calculations
+  this->material_indices_.push_back((unsigned char)material_idx+this->material_index_increment_);
   this->number_of_surfaces_++;
   return material_idx;
 }
@@ -68,25 +83,26 @@ float MaterialHandler::getUniqueCoefAt(unsigned int material, unsigned int coef_
   unsigned int coef_num = (unsigned int)MATERIAL_COEF_NUM;
   if(coef_num <= coef_idx) {
     log_msg<LOG_ERROR>(
-      L"MaterialHandler::getUniqueCoefAt - invalid index %d, should be less than %d") 
+      L"MaterialHandler::getUniqueCoefAt - invalid index %d, should be less than %d")
       %coef_idx %coef_num;
-    throw std::out_of_range("Coef idx out of range");
+      throw std::out_of_range("Coef idx out of range");
   }
-  
   material_t mat = this->unique_coefficients_.at(material);
   return mat.coefs[coef_idx];
 }
 
 float MaterialHandler::getSurfaceCoefAt(unsigned int surface, unsigned int coef_idx) {
   unsigned int coef_num = (unsigned int)MATERIAL_COEF_NUM;
-  
+
   if(coef_num <= coef_idx) {
-    log_msg<LOG_ERROR>(L"MaterialHandler::getSurfaceCoefAt - invalid index %d, should be less than %d") 
+    log_msg<LOG_ERROR>(L"MaterialHandler::getSurfaceCoefAt - invalid index %d, should be less than %d")
     %coef_idx %coef_num;
     throw std::out_of_range("Coef idx out of range");
   }
-  
-  return this->getUniqueCoefAt(this->material_indices_.at(surface), coef_idx);
+  // As the material index list starts from material_index_increment_,
+  // -1 to mach the material coefficient list
+  unsigned int mat_idx = this->material_indices_.at(surface)-this->material_index_increment_;
+  return this->getUniqueCoefAt(mat_idx, coef_idx);
 }
 
 unsigned char* MaterialHandler::getMaterialIdxPtr() {
@@ -94,28 +110,29 @@ unsigned char* MaterialHandler::getMaterialIdxPtr() {
     log_msg<LOG_INFO>(L"MaterialHandler::getMaterialIdxPtr() - No materials assigned");
     return (unsigned char*)NULL;
   }
-  
+
   return &(this->material_indices_[0]);}
 
 float* MaterialHandler::getMaterialCoefficientPtr() {
   this->coefficient_vector_.clear();
   unsigned int coefs = this->getNumberOfCoefficients();
+  // The increment is added in the function here, so it is not added later
   unsigned int unique_mat = this->getNumberOfUniqueMaterials();
+  unsigned int increment = this->material_index_increment_;
+  this->coefficient_vector_.assign(coefs*(unique_mat), 0.f);
 
-  this->coefficient_vector_.assign(coefs*unique_mat, 0.f);
-  
   float mean = 0.f;
-  
-  for(unsigned int i = 0; i < unique_mat; i++) {
+
+  for(unsigned int i = increment; i < unique_mat; i++) {
     for(unsigned int j = 0; j < coefs; j++) {
       if(!this->admitance_){
-        float coef =  this->getUniqueCoefAt(i,j);
+        float coef =  this->getUniqueCoefAt(i-increment,j);
         coef = reflection2Admitance(coef);
         coefficient_vector_.at(i*coefs +j) = coef;
         mean+=coef;
       }
       else {
-        float coef =  this->getUniqueCoefAt(i,j);
+        float coef =  this->getUniqueCoefAt(i-increment,j);
         coefficient_vector_.at(i*coefs +j) = coef;
         mean+=coef;
       }
@@ -124,8 +141,8 @@ float* MaterialHandler::getMaterialCoefficientPtr() {
   mean /=coefs*unique_mat;
 
   log_msg<LOG_INFO>
-  (L"MaterialHanlder::getMaterialCoefficientPtr - %d unique materials, %d coefficients, mean value %f")
-  % unique_mat %coefs %mean;
+  (L"MaterialHanlder::getMaterialCoefficientPtr - %d unique materials,"
+   L"%d coefficients, mean value %f") % unique_mat %coefs %mean;
   return &(this->coefficient_vector_[0]);
 }
 
@@ -133,32 +150,31 @@ double* MaterialHandler::getMaterialCoefficientPtrDouble() {
   this->coefficient_vector_.clear();
   unsigned int coefs = this->getNumberOfCoefficients();
   unsigned int unique_mat = this->getNumberOfUniqueMaterials();
+  unsigned int increment = this->material_index_increment_;
+  this->coefficient_vector_double_.assign(coefs*(unique_mat), 0.0);
 
-  this->coefficient_vector_double_.assign(coefs*unique_mat, 0.0);
-  
   double mean = 0.f;
-  
-  for(unsigned int i = 0; i < unique_mat; i++) {
+
+  for(unsigned int i = increment; i < unique_mat; i++) {
     for(unsigned int j = 0; j < coefs; j++) {
       if(!this->admitance_){
-        double coef =  (double)this->getUniqueCoefAt(i,j);
+        double coef =  (double)this->getUniqueCoefAt(i-increment,j);
         coef = (double)reflection2Admitance((double)coef);
         coefficient_vector_double_.at(i*coefs +j) = coef;
         mean+=coef;
       }
       else {
-        double coef =  (double)this->getUniqueCoefAt(i,j);
+        double coef =  (double)this->getUniqueCoefAt(i-increment,j);
         coefficient_vector_double_.at(i*coefs +j) = coef;
         mean+=coef;
       }
-      //coefficient_vector_.at(i*coefs +j) = this->getUniqueCoefAt(i,j);
     }
   }
   mean /=coefs*unique_mat;
 
   log_msg<LOG_INFO>
-  (L"MaterialHanlder::getMaterialCoefficientPtr - %d unique materials, %d coefficients, mean value %f")
-  % unique_mat %coefs %mean;
+  (L"MaterialHanlder::getMaterialCoefficientPtr - %d unique materials, %d "
+   L"coefficients, mean value %f") % unique_mat %coefs %mean;
   return &(this->coefficient_vector_double_[0]);
 
 }
@@ -173,7 +189,8 @@ float MaterialHandler::getMeanAbsorption(unsigned int octave) {
   return mean_absorption/this->number_of_surfaces_;
 }
 
-bool checkCoefficients(std::vector<float> material_coefficient, MaterialHandler::material_t current_coefficient) {
+bool checkCoefficients(std::vector<float> material_coefficient,
+                       MaterialHandler::material_t current_coefficient) {
   bool ret = true;
   for(unsigned int i = 0; i < MATERIAL_COEF_NUM; i++) {
     if(material_coefficient.at(i) != current_coefficient.coefs[i])
@@ -203,24 +220,13 @@ unsigned int MaterialHandler::checkIfUnique(std::vector<float> material_coeffici
   return ret;
 }
 
-void MaterialHandler::setGlobalMaterial(unsigned int number_of_surfaces, float coef) {
-  log_msg<LOG_DEBUG>
-    (L"MaterialHandler::setGlobalMaterial - assigning %d surfaces with coefficient %f")
-    %number_of_surfaces %coef;
-
-  std::vector<float> mat;
-  mat.assign(MATERIAL_COEF_NUM, coef);
-  for(unsigned int i = 0; i < number_of_surfaces; i++) {
-    this->addSurfaceMaterial(mat);
-  }
-}
-
-void MaterialHandler::setMaterialIndexAt(unsigned int surface_idx, unsigned char material_idx) {
+void MaterialHandler::setMaterialIndexAt(unsigned int surface_idx,
+                                         unsigned char material_idx) {
   if(surface_idx >= this->number_of_surfaces_) {
-    log_msg<LOG_INFO>(L"MaterialHandler::setMaterialIndexAt - surface index %d out of bounds % d, returning")
+    log_msg<LOG_INFO>(L"MaterialHandler::setMaterialIndexAt - surface index %d "
+                      L"out of bounds % d, returning")
                       % surface_idx %this->number_of_surfaces_;
     return;
   }
   this->material_indices_.at(surface_idx) = material_idx;
 }
-

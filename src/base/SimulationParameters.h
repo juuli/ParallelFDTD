@@ -4,7 +4,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 //
 // This file is a part of the PadallelFDTD Finite-Difference Time-Domain
-// simulation library. It is released under the MIT License. You should have 
+// simulation library. It is released under the MIT License. You should have
 // received a copy of the MIT License along with ParallelFDTD.  If not, see
 // http://www.opensource.org/licenses/mit-license.php
 //
@@ -37,12 +37,14 @@ Inside App class
 #include <vector>
 
 enum UpdateType {SRL_FORWARD, SHARED, SRL};
+enum VoxelizationType {SOLID, SURFACE, SURFACE_6};
 
 class SimulationParameters {
 public:
   SimulationParameters()
-  : 
+  :
     update_type_(SRL_FORWARD),
+    voxelization_type_(SOLID),
     c_(344.f),
     lambda_(((double)1/sqrt((double)3))),
     octave_(0),
@@ -64,12 +66,13 @@ public:
 
 private:
   UpdateType update_type_;
+  VoxelizationType voxelization_type_;
   float c_;                       ///< Speed of sound
-  double lambda_;                 ///< Courant number used in the simulation           
+  double lambda_;                 ///< Courant number used in the simulation
   unsigned int octave_;           ///< Ocateve band to simulate
-  unsigned int num_steps_;        ///< Number of steps to simulate 
+  unsigned int num_steps_;        ///< Number of steps to simulate
   unsigned int spatial_fs_;       ///< Spatial sampling frequency
-  
+
   nv::Vec3f bounding_box_min_;    ///< Bounding box min coordintae
   nv::Vec3f bounding_box_max_;    ///< Bounding box max coordinate
 
@@ -80,7 +83,7 @@ private:
   std::vector<Receiver> receivers_;                       ///< List of receivers
   std::vector< std::vector<float> > source_input_data_;   ///< input data for each source
   std::vector< std::vector<double> > source_input_data_double_;   ///< input data for each source
-  std::vector< std::vector<float> > source_output_data_;  ///< 
+  std::vector< std::vector<float> > source_output_data_;  ///<
   std::vector<float*> d_source_output_data_;              ///< Input data for each source
                                                           /// on the device
 
@@ -89,7 +92,7 @@ private:
   std::vector<float> parameter_vec_;
   std::vector<double> parameter_vec_double_;
   std::vector<float> grid_ir_;
-  
+
   /// \brief Get a raw source sample
   /// \param source_idx source index
   /// \param step the time instance of the sample
@@ -98,13 +101,14 @@ private:
   /// \brief Get a transparent source sample; a regular source sample convolved
   /// the impulse response of the mesh
   /// \param source_idx source index
-  /// \param step the 
+  /// \param step the
   float getTransparentSourceSample(unsigned int source_idx, unsigned int step);
   double getTransparentSourceSampleDouble(unsigned int source_idx, unsigned int step);
 public:
   // Setters
   void readGridIr(std::string ir_fp);
   void setUpdateType(enum UpdateType update_type);
+  void setVoxelizationType(enum VoxelizationType voxelization_type);
   void setC(float c) {this->c_ = c;}
   void setLambda(double lambda) {this->lambda_ = lambda;}
   void setOctave(unsigned int octave) {this->octave_ = octave;}
@@ -113,12 +117,13 @@ public:
 
   void setBoundingBox(nv::Vec3f bounding_box_min, nv::Vec3f bounding_box_max)
     {bounding_box_min_ = bounding_box_min; bounding_box_max_ = bounding_box_max;}
-  
-  void setAddPaddingToElementIdx(bool add_padding_to_element_idx) 
+
+  void setAddPaddingToElementIdx(bool add_padding_to_element_idx)
     {this->add_padding_to_element_idx_ = add_padding_to_element_idx;}
-  
+
   // Getters
   enum UpdateType getUpdateType() const {return this->update_type_;}
+  enum VoxelizationType getVoxelizationType() const {return this->voxelization_type_;}
   float getC() const {return this->c_;};
   double getLambda() const {return this->lambda_;}
   float getDx() const;
@@ -132,6 +137,7 @@ public:
   // Source/Receiver functions
   void addSource(float x, float y, float z);
   void addSource(Source src);
+  void addSource_no_logging(Source src);
   void addReceiver(float x, float y, float z) {receivers_.push_back(Receiver(x,y,z));};
   void addReceiver(Receiver rec) {receivers_.push_back(rec);};
   // Add device pointer which contain the source input data
@@ -140,7 +146,12 @@ public:
   void removeReceiver(unsigned int i);
   void updateSourceAt(unsigned int i, Source src);
   void updateReceiverAt(unsigned int i, Receiver rec);
+  void updateInputDataAt(unsigned int i, std::vector<float> data);
+  void updateInputDataDoubleAt(unsigned int i, std::vector<double> data);
   void resetSourcesAndReceivers();
+  void resetReceivers();
+  void resetSources();
+  void resetInputData(); // both single and double!
 
   void addInputData(float* data, unsigned int number_of_samples);
   void addInputData(std::vector<float> data) {this->source_input_data_.push_back(data);}
@@ -157,11 +168,11 @@ public:
   nv::Vec3i getSourceElementCoordinates(unsigned int source_idx);
   nv::Vec3i getReceiverElementCoordinates(unsigned int receiver_idx);
 
-  unsigned int getSourceElementIdx(unsigned int source_idx, 
+  unsigned int getSourceElementIdx(unsigned int source_idx,
                                    unsigned int dim_x,
                                    unsigned int dim_y);
 
-  unsigned int getReceiverElementIdx(unsigned int receiver_idx, 
+  unsigned int getReceiverElementIdx(unsigned int receiver_idx,
                                      unsigned int dim_x,
                                      unsigned int dim_y);
 

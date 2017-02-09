@@ -29,7 +29,10 @@ public:
 
   //Constructor
   TGAImage();
-
+  
+  ~TGAImage() {
+    delete[] this->m_pixels;
+  }
   //Overridden Constructor
   TGAImage(short width, short height);
 

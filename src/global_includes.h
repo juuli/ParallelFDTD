@@ -25,16 +25,26 @@
 
 #define APP_EXIT_PAUSE 0
 
+#include <math.h>
 #include "logger.h"
 
 inline float reflection2Admitance(float coef) {
-	float ret = ((1.f-coef)/(1.f+coef));
-	return ret;
+  float ret = ((1.f-coef)/(1.f+coef));
+  return ret;
+}
+
+inline float absorption2Admitance(float coef) {
+  float ret = reflection2Admitance(sqrt(1.f-coef));
+  return ret;
 }
 
 inline float admitance2Reflection(float coef) {
-	float ret = reflection2Admitance(coef);
-	return ret;
+  float ret = reflection2Admitance(coef);
+  return ret;
 }
 
+inline float admitance2absorption(float coef) {
+  float ret = admitance2Reflection(coef);
+  return 1.f - ret*ret;
+}
 #endif

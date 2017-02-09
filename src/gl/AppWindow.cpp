@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 //
 // This file is a part of the PadallelFDTD Finite-Difference Time-Domain
-// simulation library. It is released under the MIT License. You should have 
+// simulation library. It is released under the MIT License. You should have
 // received a copy of the MIT License along with ParallelFDTD.  If not, see
 // http://www.opensource.org/licenses/mit-license.php
 //
@@ -91,31 +91,31 @@ void AppWindow::draw() {
   float dB = 10.f;
 
   if(this->window_params_.invert_time)
-    currentApp->invertTime(); 
+    currentApp->invertTime();
 
   if(this->window_params_.mesh_reset)
     currentApp->resetPressureMesh();
-  
+
   // Execute step
   if(!this->window_params_.execution_pause)
     currentApp->executeStep();
 
   if(this->window_params_.draw_xy)
-    currentApp->updateVisualization(this->window_params_.current_z, 0, 
+    currentApp->updateVisualization(this->window_params_.current_z, 0,
                     this->window_params_.selection, dB);
   if(this->window_params_.draw_xz)
-    currentApp->updateVisualization(this->window_params_.current_y, 1, 
+    currentApp->updateVisualization(this->window_params_.current_y, 1,
                     this->window_params_.selection, dB);
   if(this->window_params_.draw_yz)
-    currentApp->updateVisualization(this->window_params_.current_x, 2, 
+    currentApp->updateVisualization(this->window_params_.current_x, 2,
                     this->window_params_.selection, dB);
 
-  glClearColor (1.0f, 1.0f, 1.0f, 1.0f); 
-  glClearDepth (1.0f); 
+  glClearColor (1.0f, 1.0f, 1.0f, 1.0f);
+  glClearDepth (1.0f);
   glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
   glEnable (GL_BLEND);
   glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  
+
   this->drawStatusText();
   if(this->window_params_.help)
     this->drawHelp();
@@ -125,19 +125,19 @@ void AppWindow::draw() {
   this->drawAxes();
   this->drawPbos();
 
-  if(this->window_params_.draw_geometry)
+  if(this->window_params_.draw_geometry && currentApp->hasGeometry())
     this->drawGeometry();
 
   drawSourcesAndReceivers();
   glutSwapBuffers ();
-  glFlush (); 
+  glFlush ();
 
   if(this->window_params_.step)
     this->window_params_.execution_pause = true;
 
   this->window_params_.mesh_reset = false;
   this->window_params_.invert_time = false;
-  
+
   glutPostRedisplay();
 
 }
@@ -145,12 +145,12 @@ void AppWindow::draw() {
 void AppWindow::mouse(int button, int state, int x, int y) {
 
   /*
-   The button parameter is one of GLUT_LEFT_BUTTON, GLUT_MIDDLE_BUTTON, or GLUT_RIGHT_BUTTON. 
+   The button parameter is one of GLUT_LEFT_BUTTON, GLUT_MIDDLE_BUTTON, or GLUT_RIGHT_BUTTON.
    For systems with only two mouse buttons, it may not be possible to generate GLUT_MIDDLE_BUTTON callback.
-   
+
    state parameter is either GLUT_UP or GLUT_DOWN indicating whether the callback was due to a release or press respectively
    */
-  
+
   if(GLUT_ACTIVE_SHIFT == glutGetModifiers()){
     this->window_params_.shift = true;
   }
@@ -167,7 +167,7 @@ void AppWindow::mouse(int button, int state, int x, int y) {
     this->window_params_.shift = false;
   }
 
-  
+
 }
 
 void AppWindow::keyboardDown(unsigned char key, int x, int y) {
@@ -203,8 +203,8 @@ void AppWindow::keyboardDown(unsigned char key, int x, int y) {
   }
 
   if(key == 'q') {
-    this->window_params_.selection = this->window_params_.selection++;
-    this->window_params_.selection = this->window_params_.selection%3;
+    this->window_params_.selection = this->window_params_.selection+1;
+    this->window_params_.selection = (this->window_params_.selection)%3;
   }
 
   if(key == 'h') {
@@ -256,8 +256,8 @@ void AppWindow::keyboardUp(unsigned char key, int x, int y){
   this->window_params_.k_down = false;
   (void)x;
   (void)y;
-  
-  
+
+
 }
 
 void AppWindow::motion(int x, int y) {
@@ -294,7 +294,7 @@ void AppWindow::close() {
     this->deleteVbo(i);
   for(unsigned int i = 0; i < this->pbo_vector_.size(); i++)
     this->pbo_vector_.at(i).clear();
-    
+
   glutLeaveMainLoop();
 }
 
@@ -327,7 +327,7 @@ void AppWindow::initializeWindow(int w, int h) {
   // Window controls
   this->resetParameters();
   this->setupCallbacks();
-    
+
   glsafe(glGetError(), "AppWindow::initializeWindow - before return");
 }
 
@@ -395,7 +395,7 @@ void AppWindow::geometryToVbo(void* data) {
   GeometryHandler* gh = (GeometryHandler*)this->data_;
   // Push an empty Vertex Buffer object
   this->vbo_vector_.push_back(AppVbo());
-  
+
   unsigned int number_of_coordinates = 4*gh->getNumberOfVertices();
   GLfloat* vertices = new GLfloat[number_of_coordinates];
 
@@ -415,7 +415,7 @@ void AppWindow::geometryToVbo(void* data) {
   this->vbo_vector_[idx].setVertexData(vertices, 4, gh->getNumberOfVertices(), GL_STATIC_DRAW);
   log_msg<LOG_INFO>(L"AppWindow::geometryToVbo - index buffer size %d") % (3*gh->getNumberOfTriangles());
   this->vbo_vector_[idx].setIndexData(gh->getIndexPtr(), 3*gh->getNumberOfTriangles(), GL_STATIC_DRAW);
-  
+
   delete [] vertices;
 }
 
@@ -423,7 +423,7 @@ void AppWindow::createEmptyVbo(unsigned int num_coords, unsigned int num_verts) 
   log_msg<LOG_INFO>(L"AppWindow::createEmptyVbo - num_coords %d, num_verts %d, buffer size %d") %num_coords %num_verts %(num_verts*num_coords);
   this->vbo_vector_.push_back(AppVbo());
   unsigned int idx = (unsigned int)this->vbo_vector_.size()-1;
-  
+
   this->vbo_vector_[idx].setVertexData((float*)NULL, num_coords, num_verts, GL_DYNAMIC_DRAW);
   this->vbo_vector_[idx].setColorData((float*)NULL, GL_DYNAMIC_DRAW);
 }
@@ -470,7 +470,7 @@ void AppWindow::drawString3D(const char *str, nv::Vec3f pos, nv::Vec3f color, vo
   glPopMatrix();
   glMatrixMode(GL_PROJECTION);
   glPopMatrix();
-    
+
   glEnable(GL_TEXTURE_2D);
   glEnable(GL_LIGHTING);
   glPopAttrib();
@@ -516,7 +516,7 @@ void AppWindow::drawSourcesAndReceivers() {
     float r = currentApp->m_parameters.getDx();
     glColor4f(0.f, 1.f, 0.f, 1.f);
     glMatrixMode(GL_MODELVIEW);
-    glPushMatrix();   
+    glPushMatrix();
     glTranslatef(x,y,z);
     Sphere=gluNewQuadric();
     gluSphere(Sphere,r,20,20);
@@ -531,7 +531,7 @@ void AppWindow::drawSourcesAndReceivers() {
     float r = currentApp->m_parameters.getDx();
     glColor4f(1.f, 0.f, 0.f, 1.f);
     glMatrixMode(GL_MODELVIEW);
-    glPushMatrix();   
+    glPushMatrix();
     glTranslatef(x,y,z);
     Sphere=gluNewQuadric();
     gluSphere(Sphere,r,20,20);
@@ -573,11 +573,15 @@ void AppWindow::drawStatusText() {
   drawString3D(ss.str().c_str(), nv::Vec3f(10,top,0), nv::Vec3f(0,0,0), NULL);
   ss.str(std::string());
   top -=increment;
-  ss<<"Fs: "<<currentApp->m_parameters.getSpatialFs();
+  ss<<"Spatial fs: "<<currentApp->m_parameters.getSpatialFs();
   drawString3D(ss.str().c_str(), nv::Vec3f(10,top,0), nv::Vec3f(0,0,0), NULL);
   ss.str(std::string());
   top -=increment;
   ss<<"Update type: "<<schemes[currentApp->m_parameters.getUpdateType()];
+  drawString3D(ss.str().c_str(), nv::Vec3f(10,top,0), nv::Vec3f(0,0,0), NULL);
+  ss.str(std::string());
+  top -=increment;
+  ss<<"Render selector: "<<this->window_params_.selection;
   drawString3D(ss.str().c_str(), nv::Vec3f(10,top,0), nv::Vec3f(0,0,0), NULL);
   ss.str(std::string());
   top -=increment;

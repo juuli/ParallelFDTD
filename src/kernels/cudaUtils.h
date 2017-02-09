@@ -35,6 +35,8 @@ extern "C" {
 /// \return the best GPU (with maximum GFLOPS)
 int gpuGetMaxGflopsDeviceId();
 
+/// \return the best GPU (with maximum free memory)
+int gpuGetMaxFreeMemoryDeviceId();
 
 /// \param major The major revision number of the Cuda device
 /// \param minor The minor revision number of the Cuda device

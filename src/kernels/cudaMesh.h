@@ -4,7 +4,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 //
 // This file is a part of the PadallelFDTD Finite-Difference Time-Domain
-// simulation library. It is released under the MIT License. You should have 
+// simulation library. It is released under the MIT License. You should have
 // received a copy of the MIT License along with ParallelFDTD.  If not, see
 // http://www.opensource.org/licenses/mit-license.php
 //
@@ -31,6 +31,7 @@
 #include <cuda.h>
 #include <cuda_runtime.h>
 #include <vector>
+#include <stdint.h>
 
 #define INSIDE_SWITCH 7
 #define FORWARD_POSITION_MASK 0X7F
@@ -43,25 +44,28 @@
 #define SIGN_Y 0x20
 #define SIGN_Z 0x40
 
+typedef unsigned long long int mesh_size_t;
+
 // Forward Declaration
 class LongNode;
 class ShortNode;
 class Node;
 
 ///////////////////////////////////////////////////////////////////////////////
-/// \brief Class that handles the simulation domain. Class contains device 
+/// \brief Class that handles the simulation domain. Class contains device
 /// pointers to different meshes which are used in the simulation.
 /// Different meshes are: <br>
-/// <i>position index mesh:</i> Contains the orientation of each node <br>
-/// <i>material index mesh:</i> Contains the material index of each node <br>
+/// <i>Position index mesh:</i> Contains the orientation of each node <br>
+/// <i>Material index mesh:</i> Contains the material index of each node <br>
 /// <i>2 X Pressure mesh: </i>Either a single precision of double precision mesh of <br>
-///                pressure values for the current  and past pressure values 
+///                pressure values for the current  and past pressure values
 ///
 ///////////////////////////////////////////////////////////////////////////////
 
 class CudaMesh {
 public:
-  CudaMesh() 
+  /// Default constructor
+  CudaMesh()
   : double_(false),
     dif_order_(0),
     number_of_partitions_(0),
@@ -80,6 +84,7 @@ public:
     block_size_z_(0)
   {};
 
+  /// Default destructor
   ~CudaMesh() {};
 
 public:
@@ -100,7 +105,7 @@ public:
   std::vector<float*> pressures_past_;
   std::vector<float*> parameters_;
   std::vector<float*> materials_;
-  
+
   // Double precision
   std::vector<double*> pressures_double_;
   std::vector<double*> pressures_past_double_;
@@ -123,7 +128,7 @@ public:
   std::vector<float*> dif_;
 
   std::vector< unsigned int > device_list_;
-  std::vector< std::vector< unsigned int> > partition_indexing_;
+  std::vector< std::vector< mesh_size_t > > partition_indexing_;
   std::vector<unsigned int> memory_splits_;
   std::vector<unsigned int> number_of_partition_elements_;
   unsigned int number_of_partitions_;
@@ -133,19 +138,19 @@ public:
   float* h_material_coef_ptr_; ///< Material coefficient on host, not to be deallocated
   double* h_material_coef_ptr_double_;  ///< Material coefficient on host, not to be deallocated
   unsigned int number_of_unique_materials_;  ///< number of unique materials on the mesh
-  
+
   // Parameters
   float* h_parameter_ptr_; ///< Simulation parameters on host, not to be deallocated
   double* h_parameter_ptr_double_; ///< Simulation parameters on host, not to be deallocated
 
   ///// Mesh properties
-  unsigned int num_elements_;
-  unsigned int num_air_elements_total_;
-  unsigned int num_boundary_elements_total_;
-  unsigned int dim_x_;
-  unsigned int dim_y_;
-  unsigned int dim_z_;
-  unsigned int dim_xy_;
+  mesh_size_t num_elements_;
+  mesh_size_t num_air_elements_total_;
+  mesh_size_t num_boundary_elements_total_;
+  mesh_size_t dim_x_;
+  mesh_size_t dim_y_;
+  mesh_size_t dim_z_;
+  mesh_size_t dim_xy_;
   float dx_;
 
   unsigned int block_size_x_;
@@ -153,8 +158,8 @@ public:
   unsigned int block_size_z_;
 
   // Private Member functions
-  void toBilbaoScheme();
-  void toKowalczykScheme();
+  void toBilbaoScheme(unsigned char* d_pos, unsigned char* d_mat);
+  void toKowalczykScheme(unsigned char* d_pos, unsigned char* d_mat);
 
 public:
   void destroyPartitions() {
@@ -175,28 +180,28 @@ public:
         destroyMem(materials_.at(i));
         destroyMem(parameters_.at(i));
       }
-      
+
     }
     cudasafe(cudaDeviceSynchronize(), "cudaDeviceSynchronize after destroy");
     c_log_msg(LOG_VERBOSE, "CudaMesh destructor returning");
   };
 
-  float* getPressurePtrAt(unsigned int partition_idx) 
+  float* getPressurePtrAt(unsigned int partition_idx)
     {return this->pressures_.at(partition_idx);};
 
-  float* getPastPressurePtrAt(unsigned int partition_idx) 
+  float* getPastPressurePtrAt(unsigned int partition_idx)
     {return this->pressures_past_.at(partition_idx);};
 
-  float* getMaterialPtrAt(unsigned int partition_idx) 
+  float* getMaterialPtrAt(unsigned int partition_idx)
     {return this->materials_.at(partition_idx);};
 
-  float* getParameterPtrAt(unsigned int partition_idx) 
+  float* getParameterPtrAt(unsigned int partition_idx)
     {return this->parameters_.at(partition_idx);};
 
-  double* getMaterialPtrDoubleAt(unsigned int partition_idx) 
+  double* getMaterialPtrDoubleAt(unsigned int partition_idx)
     {return this->materials_double_.at(partition_idx);};
 
-  double* getParameterPtrDoubleAt(unsigned int partition_idx) 
+  double* getParameterPtrDoubleAt(unsigned int partition_idx)
     {return this->parameters_double_.at(partition_idx);};
 
   double* getPressureDoublePtrAt(unsigned int partition_idx)
@@ -205,54 +210,56 @@ public:
   double* getPastPressureDoublePtrAt(unsigned int partition_idx)
     {return this->pressures_past_double_.at(partition_idx);}
 
-  unsigned char* getPositionIdxPtrAt(unsigned int partition_idx) 
+  unsigned char* getPositionIdxPtrAt(unsigned int partition_idx)
     {return this->position_idx_ptr_.at(partition_idx);}
 
-  unsigned char* getMaterialIdxPtrAt(unsigned int partition_idx) 
+  unsigned char* getMaterialIdxPtrAt(unsigned int partition_idx)
     {return this->material_idx_ptr_.at(partition_idx);}
 
   unsigned int getMemorySplitAt(unsigned int partition_idx)
     {return this->memory_splits_.at(partition_idx);}
 
-  unsigned int getNumberOfElementsAt(unsigned int partition_idx)
-    {return (unsigned int)this->partition_indexing_.at(partition_idx).size()*this->getDimXY();}
+  mesh_size_t getNumberOfElementsAt(unsigned int partition_idx)
+    {return (mesh_size_t)this->partition_indexing_.at(partition_idx).size()*this->getDimXY();}
 
   unsigned int getNumberOfPartitions() {return (unsigned int)this->partition_indexing_.size();}
   unsigned int getPartitionSize() {return (unsigned int)this->partition_indexing_.at(0).size();}
 
   unsigned int getPartitionSize(int partition) {
     unsigned int ret = 0; unsigned int np = this->getNumberOfPartitions();
-    if(partition < (int)np) ret = (unsigned int)this->partition_indexing_.at(partition).size();   
+    if(partition < (int)np) ret = (unsigned int)this->partition_indexing_.at(partition).size();
     return ret;}
-  
-  unsigned int getFirstSliceIdx(int partition) {return this->partition_indexing_.at(partition).at(0);}
+
+  mesh_size_t getFirstSliceIdx(int partition) {return this->partition_indexing_.at(partition).at(0);}
   unsigned int getDeviceAt(int i) {return this->device_list_.at(i);}
   unsigned int getBlockX() {return this->block_size_x_;}
   unsigned int getBlockY() {return this->block_size_y_;}
   unsigned int getBlockZ() {return this->block_size_z_;}
-  unsigned int getDimX() {return this->dim_x_;}
-  unsigned int getDimY() {return this->dim_y_;}
-  unsigned int getDimZ() {return this->dim_z_;}
-  unsigned int getDimXY() {return this->dim_xy_;}
+  mesh_size_t getDimX() {return this->dim_x_;}
+  mesh_size_t getDimY() {return this->dim_y_;}
+  mesh_size_t getDimZ() {return this->dim_z_;}
+  mesh_size_t getDimXY() {return this->dim_xy_;}
   unsigned int getGridDimX() {return (this->dim_x_)/(this->block_size_x_);}
   unsigned int getGridDimY() {return (this->dim_y_)/(this->block_size_y_);}
   unsigned int getGridDimZ() {return (this->dim_z_)/(this->block_size_z_);}
-  unsigned int getNumberOfElements() {return this->num_elements_;}
-  unsigned int getNumberOfAirElements() {return this->num_air_elements_total_;}
-  unsigned int getNumberOfBoundaryElements() {return this->num_boundary_elements_total_;}
+  mesh_size_t getNumberOfElements() {return this->num_elements_;}
+  mesh_size_t getNumberOfAirElements() {return this->num_air_elements_total_;}
+  mesh_size_t getNumberOfBoundaryElements() {return this->num_boundary_elements_total_;}
   bool isDouble() const {return this->double_;}
   void setDouble(bool is_double) {this->double_ = is_double;}
 
 
-  inline int getElementIndex(int x, int y, int z) {
+  inline mesh_size_t getElementIndex(mesh_size_t x,
+                                                mesh_size_t y,
+                                                mesh_size_t z) {
     return this->getDimXY()*z+this->getDimX()*y+x;
   }
 
-  inline void getElementIdxAndDevice(unsigned int x, unsigned int y, unsigned int z, 
-                                     int* dev_i, int* elem) {
+  inline void getElementIdxAndDevice(unsigned int x, unsigned int y, unsigned int z,
+                                     int* dev_i, mesh_size_t* elem) {
     *dev_i = -1;
-    *elem = -1;
-    for(int i = 0; i < this->partition_indexing_.size(); i++) {
+    *elem = (mesh_size_t)-1;
+    for(unsigned int i = 0; i < this->partition_indexing_.size(); i++) {
       if(z > *(this->partition_indexing_.at(i).end()-1))
         continue;
       if(z < this->partition_indexing_.at(i).at(0))
@@ -264,7 +271,7 @@ public:
      }
     return;
   }
-  
+
   inline int getDeviceOfElement(unsigned int x, unsigned int y, unsigned int z) {
     int ret = -1;
     for(int i = 0; i < this->partition_indexing_.size(); i++) {
@@ -277,32 +284,31 @@ public:
     return ret;
   }
 
-  std::vector< std::vector <unsigned int> > getPartitionIndexing(int num_parts,
+  std::vector< std::vector <mesh_size_t> > getPartitionIndexing(int num_parts,
                                                                  int dim) {
     int part_size = dim/num_parts;
-    std::vector< std::vector<unsigned int> > ret;
-    for(int i = 0; i < num_parts; i++) {  
+    std::vector< std::vector<mesh_size_t> > ret;
+    for(int i = 0; i < num_parts; i++) {
       int s_inc = 1;
       int e_inc = 1;
-    
+
       if(i == 0) {s_inc =0;}
       if(i == num_parts-1) {e_inc = 0;}
       int current_size = part_size+s_inc+e_inc;
-  
-      // If at the last part, get rest of the slices      
+
+      // If at the last part, get rest of the slices
       if(i != 0 && i == num_parts-1) {
         int inc = dim-(i+1)*part_size;
         current_size += inc;
       }
-      
-      std::vector<unsigned int> slices(current_size, 0);  
+
+      std::vector<mesh_size_t> slices(current_size, 0);
       for(int j = 0; j < current_size; j++) {
         slices.at(j) = i*part_size-s_inc+j;
       }
       //std::cout<<"getPartitionIndexing - size slice: "<<slices.size()<<std::endl;
       ret.push_back(slices);
     }
-//    std::cout<<"getPartitionIndexing - size cont: "<<ret.size()<<std::endl;
     return ret;
   }
 
@@ -320,10 +326,9 @@ public:
   // Set a sample on each slice corresponding to the index
   template<typename T>
   void setSample(unsigned int x, unsigned int y, unsigned int z, T sample,
-                 std::vector<T*>& domain, 
-                 std::vector< std::vector<unsigned int> >& slices) {
+                 std::vector<T*>& domain,
+                 std::vector< std::vector<mesh_size_t> >& slices) {
     unsigned int s = (unsigned int)slices.size();
-    //#pragma omp parallel for
     for(int i = 0; i < s; i++) {
       if(z > *(slices.at(i).end()-1))
         continue;
@@ -331,14 +336,36 @@ public:
         break;
 
       cudaSetDevice(this->device_list_.at(i));
-      int first = slices.at(i).at(0);
+      unsigned int first = slices.at(i).at(0);
       T* dest = domain.at(i)+getElementIndex(x, y, z-first);
       cudasafe(cudaMemcpy(dest, &sample, sizeof(T), cudaMemcpyHostToDevice), "setSample T : Memcopy To device");
     }
   }
 
   template<typename T>
-  void setSampleAt(unsigned int x, unsigned int y, unsigned int z, T sample, unsigned int partition, 
+  void addSample(unsigned int x, unsigned int y, unsigned int z, T sample,
+                 std::vector<T*>& domain,
+                 std::vector< std::vector< mesh_size_t > >& slices){
+    unsigned int s = (unsigned int)slices.size();
+    for(int i = 0; i < s; i++) {
+      if(z > *(slices.at(i).end()-1))
+        continue;
+      if(z < slices.at(i).at(0))
+        break;
+
+      cudaSetDevice(this->device_list_.at(i));
+      unsigned int first = slices.at(i).at(0);
+
+      T domain_smp = 0.0;
+      T* dest = domain.at(i)+getElementIndex(x, y, z-first);
+      cudasafe(cudaMemcpy(&domain_smp, dest, sizeof(T), cudaMemcpyDeviceToHost), "addSample T : Memcopy To Host");
+      domain_smp += sample;
+      cudasafe(cudaMemcpy(dest, &domain_smp, sizeof(T), cudaMemcpyHostToDevice), "addSample T : Memcopy To Device");
+    }
+  }
+
+  template<typename T>
+  void setSampleAt(unsigned int x, unsigned int y, unsigned int z, T sample, unsigned int partition,
                 std::vector<T*>& domain) {
     unsigned int offset = getElementIndex(x,y,z);
     T* dest = domain.at(partition)+offset;
@@ -346,30 +373,18 @@ public:
   }
 
   template<typename T>
-  void addSample(unsigned int x, unsigned int y, unsigned int z, T sample,
-                 std::vector<T*>& domain, 
-                 std::vector< std::vector< unsigned int> >& slices){
-    unsigned int s = (unsigned int)slices.size();
-    //#pragma omp parallel for
-    for(int i = 0; i < s; i++) {
-      if(z > *(slices.at(i).end()-1))
-        continue;
-      if(z < slices.at(i).at(0))
-        break;
-      cudaSetDevice(this->device_list_.at(i));
-      int first = slices.at(i).at(0);
-
-      T domain_smp = 0;
-      T* dest = domain.at(i)+getElementIndex(x, y, z-first);
-      cudasafe(cudaMemcpy(&domain_smp, dest, sizeof(T), cudaMemcpyDeviceToHost), "addSample T : Memcopy To Host");
-      domain_smp+=sample;
-      cudasafe(cudaMemcpy(dest, &sample, sizeof(T), cudaMemcpyHostToDevice), "addSample T : Memcopy To Device");
-        
-    }  
+  void addSampleAt(unsigned int x, unsigned int y, unsigned int z, T sample, unsigned int partition,
+                std::vector<T*>& domain) {
+    unsigned int offset = getElementIndex(x,y,z);
+    T* dest = domain.at(partition)+offset;
+    T domain_smp = 0.0;
+    cudasafe(cudaMemcpy(&domain_smp, dest, sizeof(T), cudaMemcpyDeviceToHost), "addSample T : Memcopy To Host");
+    sample+=domain_smp;
+    cudasafe(cudaMemcpy(dest, &sample, sizeof(T), cudaMemcpyHostToDevice), "setSample T : Memcopy To device");
   }
 
   template<typename T>
-  T getSampleAt(int x, int y, int z, int partition,
+  T getSampleAt(unsigned int x, unsigned int y, unsigned int z, int partition,
                 std::vector<T*>& domain) {
     T ret = 0;
     if(z > this->partition_indexing_.at(partition).size()) {
@@ -384,9 +399,9 @@ public:
   }
 
   template<typename T>
-  T getSample(unsigned int x, unsigned int y, unsigned int z, 
-              std::vector<T*>& domain, 
-              std::vector< std::vector< unsigned int> >& slices) {
+  T getSample(unsigned int x, unsigned int y, unsigned int z,
+              std::vector<T*>& domain,
+              std::vector< std::vector< mesh_size_t > >& slices) {
     T ret = 0.0;
 
     for(int i = 0; i < slices.size(); i++) {
@@ -400,13 +415,13 @@ public:
       cudasafe(cudaMemcpy(&ret, src, sizeof(T), cudaMemcpyDeviceToHost), "addSample T : Memcopy To Host");
       break;
      }
-    return ret;   
+    return ret;
   }
 
   template<typename T>
   T* getElement(unsigned int x, unsigned int y, unsigned int z, unsigned int& dev_i,
-              std::vector<T*>& domain, 
-              std::vector< std::vector< unsigned int> >& slices) {
+              std::vector<T*>& domain,
+              std::vector< std::vector< mesh_size_t > >& slices) {
     T* ret = (T*)NULL;
 
     for(int i = 0; i < slices.size(); i++) {
@@ -419,21 +434,20 @@ public:
       dev_i = i;
       break;
      }
-    return ret;   
+    return ret;
   }
 
   template<typename T>
   T* getElementAt(unsigned int x, unsigned int y, unsigned int z, unsigned int partition,
-                 std::vector<T*>& domain, 
-                 std::vector< std::vector< unsigned int> >& slices) {
+                 std::vector<T*>& domain,
+                 std::vector< std::vector< mesh_size_t> >& slices) {
     return domain.at(partition)+getElementIndex(x, y, z);
   }
 
   template<typename T>
   void switchHalos(std::vector<T*>& domain,
-                   std::vector< std::vector< unsigned int > >& slices) {
+                   std::vector< std::vector< mesh_size_t > >& slices) {
     unsigned int slice_s = this->getDimXY();
-    #pragma omp parallel for
     for(unsigned int i = 0; i < (unsigned int)slices.size()-1; i++) {
       unsigned int src_1 =  *(slices.at(i).end()-2);
       unsigned int dest_1 =  slices.at(i+1).at(0);
@@ -447,17 +461,18 @@ public:
       T* s2 = domain.at(i+1)+(src_2-f_i1)*slice_s;
       T* d2 = domain.at(i)+(dest_2-f_i)*slice_s;
 
-      unsigned int d_1 = this->getDeviceAt(i);
-      unsigned int d_2 = this->getDeviceAt(i+1);
-      cudasafe(cudaMemcpyPeer(d1, d_2, 
-                              s1, d_1, 
+      unsigned int dev_1 = this->getDeviceAt(i);
+      unsigned int dev_2 = this->getDeviceAt(i+1);
+
+      cudasafe(cudaMemcpyPeer(d1, dev_2,
+                              s1, dev_1,
                               slice_s*sizeof(T)),
                               "CudaMesh::switchHalos - memcopyPeer i -> i+1");
 
-     cudasafe(cudaMemcpyPeer(d2, d_1, 
-                             s2, d_2, 
-                             slice_s*sizeof(T)),
-                             "CudaMesh::switchHalos - memcopyPeer i+1 -> i");
+      cudasafe(cudaMemcpyPeer(d2, dev_1,
+                              s2, dev_2,
+                              slice_s*sizeof(T)),
+                              "CudaMesh::switchHalos - memcopyPeer i+1 -> i");
     }
     cudaDeviceSynchronize();
   }
@@ -465,7 +480,7 @@ public:
   template <typename T>
   T* getElementAt(unsigned int x, unsigned int y, unsigned int z, unsigned int partition) {
     T* ret;
-    if(this->isDouble()) 
+    if(this->isDouble())
       ret = this->getElementAt(x,y,z, partition,
                                  this->pressures_double_,
                                  this->partition_indexing_);
@@ -473,25 +488,25 @@ public:
       ret = this->getElementAt(x,y,z, partition,
                                  this->pressures_,
                                  this->partition_indexing_);
-    
+
     return ret;
   }
 
   /// Function return a pointer to the element from the partitions which
-  /// correspond to the given coordinates. If sample is in halo element, 
+  /// correspond to the given coordinates. If sample is in halo element,
   /// halo indicates from which partition the sample is returned
   template <typename T>
   T* getElement(unsigned int x, unsigned int y, unsigned int z, unsigned int *halo) {
     T* ret;
-    if(this->isDouble()) 
-      ret = this->getElement(x,y,z, *halo, 
-                               this->pressures_double_, 
+    if(this->isDouble())
+      ret = this->getElement(x,y,z, *halo,
+                               this->pressures_double_,
                                this->partition_indexing_);
     else
-      ret = this->getElement(x,y,z, *halo, 
-                               this->pressures_, 
+      ret = this->getElement(x,y,z, *halo,
+                               this->pressures_,
                                this->partition_indexing_);
-    return ret;    
+    return ret;
   }
 
   // Add sample to the existing pressure value of the mesh
@@ -527,7 +542,7 @@ public:
   } // End function
 
   ///////////////////////////////////////////////////////////////////////////////
-  /// \brief Set a sample in the mesh from a value from host memory to a 
+  /// \brief Set a sample in the mesh from a value from host memory to a
   ///  specific partition
   /// \tparam The type of pressure data type, float / double
   /// \param sample Sample value to be assigned
@@ -546,7 +561,26 @@ public:
   }
 
   ///////////////////////////////////////////////////////////////////////////////
-  /// \brief Get a sample from the mesh 
+  /// \brief Add a sample in the mesh from a value from host memory to a
+  ///  specific partition
+  /// \tparam The type of pressure data type, float / double
+  /// \param sample Sample value to be assigned
+  /// \param x, y, z The element coordinates in the mesh
+  /// \param partition Partition index, namely the device in which the memory lies
+  ///////////////////////////////////////////////////////////////////////////////
+  template <typename T>
+  void addSampleAt(T sample, unsigned int x, unsigned int y, unsigned int z, unsigned int partition) {
+    c_log_msg(LOG_VERBOSE, "CudaMesh::setSampleAt - %u %u %u partition %u",x,y,z, partition);
+    if(this->isDouble()) {
+      addSampleAt(x,y,z, (double)sample, partition, this->pressures_double_);
+    }
+    else {
+      addSampleAt(x,y,z, (float)sample, partition, this->pressures_);
+    }
+  }
+
+  ///////////////////////////////////////////////////////////////////////////////
+  /// \brief Get a sample from the mesh
   /// \tparam The type of pressure data type, float / double
   /// \param x, y, z The element coordinates of the sample in the mesh
   /// \return sample value in host memory
@@ -563,7 +597,7 @@ public:
     }
     return sample;
   }
-  
+
   ///////////////////////////////////////////////////////////////////////////////
   /// \brief Get a position idx value from the mesh in a position in
   /// a specific partition
@@ -582,7 +616,7 @@ public:
     }
     return sample;
   }
-  
+
   ///////////////////////////////////////////////////////////////////////////////
   /// \brief Get a position idx value from the mesh
   /// \param x, y, z The element coordinates of the sample in the mesh
@@ -595,7 +629,6 @@ public:
     return sample;
   }
 
-
   // This function is ridiculously slow
   template<typename T>
   T* getSlice(unsigned int slice, unsigned int orientation) {
@@ -604,7 +637,7 @@ public:
     /*
     unsigned int dim_x = 0;
     unsigned int dim_y = 0;
-   
+
     if(orientation == 0) {dim_x = this->getDimX(); dim_y = this->getDimY();};
     if(orientation == 1) {dim_x = this->getDimX(); dim_y = this->getDimZ();};
     if(orientation == 2) {dim_x = this->getDimY(); dim_y = this->getDimZ();};
@@ -616,11 +649,11 @@ public:
        start_address = this->getElement(0u,0u,slice, dev_i,
                                          this->pressures_,
                                          this->partition_indexing_);
-      
+
       data= fromDevice(this->getDimXY(), start_address, this->device_list_.at(dev_i));
 
     } // end orientation
-     
+
    return data;
   }
 
@@ -645,49 +678,54 @@ public:
     return data;
   }
 
-  void makePartition(unsigned int number_of_partitions, 
-                     std::vector<unsigned int> device_list = std::vector<unsigned int>()) {
-    c_log_msg(LOG_INFO, "CudaMesh::makePartition - begin, number of partitions %d, dim z %u", 
+  void makePartition(unsigned int number_of_partitions,
+                     unsigned char* d_position_idx = NULL,
+                     unsigned char* d_material_idx = NULL,
+                     std::vector<unsigned int> device_list = std::vector<unsigned int>(),
+                     unsigned char source_device_id = 0) {
+    c_log_msg(LOG_INFO, "CudaMesh::makePartition - begin, number of partitions %d, dim z %u",
               number_of_partitions, this->getDimZ());
 
+    this->calculateBoundaries(d_position_idx, 0x86, 0x00, source_device_id);
     printMemInfo("CudaMesh::makePartition - memory before partition", getCurrentDevice());
-
 
     if(device_list.size() == 0) {
       for(unsigned int i = 0; i < number_of_partitions; i++)
-        device_list.push_back(i);  
+        device_list.push_back(i);
     }
 
     this->device_list_ = device_list;
     this->partition_indexing_ = getPartitionIndexing(number_of_partitions, this->getDimZ());
-    
+
     clock_t start_t;
     clock_t end_t;
     start_t = clock();
-    
+
     // Grab pointers to the meshes and clear the container for partitions
-    unsigned char* d_position_idx = this->position_idx_ptr_.at(0);
-    unsigned char* d_material_idx = this->material_idx_ptr_.at(0);
-    
+    if(d_position_idx == NULL || d_material_idx == NULL) {
+      d_position_idx = this->position_idx_ptr_.at(0);
+      d_material_idx = this->material_idx_ptr_.at(0);
+    }
+
     this->position_idx_ptr_.clear();
     this->material_idx_ptr_.clear();
-    
+
     // Go through devices and copy the part to each
     for(unsigned int k = 0; k < number_of_partitions; k ++) {
       int i = this->device_list_.at(k);
       cudaSetDevice(i);
-      int offset = this->partition_indexing_.at(k).at(0)*this->getDimXY();
-      int size = (int)this->partition_indexing_.at(k).size()*this->getDimXY();
+      mesh_size_t offset = this->partition_indexing_.at(k).at(0)*this->getDimXY();
+      mesh_size_t size = (mesh_size_t)this->partition_indexing_.at(k).size()*this->getDimXY();
 
       if(number_of_partitions > 1) {
         unsigned char* position_idx = valueToDevice(size+1+dim_x_, (unsigned char)0, i);
         unsigned char* material_idx = valueToDevice(size+1+dim_x_, (unsigned char)0, i);
 
-        cudasafe(cudaMemcpyPeer(position_idx, i, 
-                                d_position_idx+offset, 0, size*sizeof(unsigned char)), 
+        cudasafe(cudaMemcpyPeer(position_idx, i,
+                                d_position_idx+offset, source_device_id, size*sizeof(unsigned char)),
                                "CudaMesh::makePartition - memcpyPeer position");
-        cudasafe(cudaMemcpyPeer(material_idx, i, 
-                                d_material_idx+offset, 0, size*sizeof(unsigned char)),
+        cudasafe(cudaMemcpyPeer(material_idx, i,
+                                d_material_idx+offset, source_device_id, size*sizeof(unsigned char)),
                                "CudaMesh::makePartition - memcpyPeer material");
 
         // Push the device pointer to containers
@@ -703,23 +741,23 @@ public:
     // Free the original meshes from device 0 if number of partitions is > 1
     if(number_of_partitions > 1) {
          destroyMem(d_position_idx);
-         destroyMem(d_material_idx);    
+         destroyMem(d_material_idx);
     }
 
     // Go through devices and allocate pressures
     for(unsigned int k = 0; k < number_of_partitions; k ++) {
       int i = this->device_list_.at(k);
       cudaSetDevice(i);
-      int size = (int)this->partition_indexing_.at(k).size()*this->getDimXY();
+      mesh_size_t size = (mesh_size_t)this->partition_indexing_.at(k).size()*this->getDimXY();
 
       if(this->isDouble()) {
         c_log_msg(LOG_DEBUG, "CudaMesh::makePartition - allocating double pressures dev %u", i);
         double* P = toDevice<double>(size+1+dim_x_, i);
         double* P_past = toDevice<double>(size+1+dim_x_, i);
-        
+
         // Push the device pointers to containers
         this->pressures_double_.push_back(P);
-        this->pressures_past_double_.push_back(P_past);    
+        this->pressures_past_double_.push_back(P_past);
 
         // Allocate and copy material coefficients to all devices
         c_log_msg(LOG_DEBUG, "CudaMesh::makePartition - allocating double materials");
@@ -728,7 +766,7 @@ public:
                                                             i));
 
         // Allocate and copy simulation parameters to all devices
-        this->parameters_double_.push_back(toDevice<double>(10, this->h_parameter_ptr_double_, i));
+        this->parameters_double_.push_back(toDevice<double>(4, this->h_parameter_ptr_double_, i));
       }
       else {
         c_log_msg(LOG_DEBUG, "CudaMesh::makePartition - allocating float pressures dev %u", i);
@@ -741,7 +779,7 @@ public:
                                                    this->h_material_coef_ptr_,
                                                    i));
         // Allocate and copy simulation parameters to all devices
-        this->parameters_.push_back(toDevice(4, this->h_parameter_ptr_, i));
+        this->parameters_.push_back(toDevice<float>(4, this->h_parameter_ptr_, i));
       }
     }// End partition loop
 
@@ -750,6 +788,115 @@ public:
 
   } // End make partition
 
+  void makePartitionFromHost(unsigned int number_of_partitions,
+                             unsigned char* h_position_idx = NULL,
+                             unsigned char* h_material_idx = NULL,
+                             std::vector<unsigned int> device_list = std::vector<unsigned int>()) {
+
+    if((h_position_idx == NULL)||(h_material_idx == NULL)) {
+      c_log_msg(LOG_ERROR, "CudaMesh::makePartitionFromHost - Invalid position "
+                           "or material index pointer (NULL), exitting");
+    }
+
+    this->calculateBoundariesHost(h_position_idx, 0x86, 0x00);
+    c_log_msg(LOG_INFO, "CudaMesh::makePartitionFromHost - begin, number of partitions %d, dim z %u",
+              number_of_partitions, this->getDimZ());
+
+    printMemInfo("CudaMesh::makePartitionFromHost - memory before partition", getCurrentDevice());
+
+    if(device_list.size() == 0) {
+      for(unsigned int i = 0; i < number_of_partitions; i++)
+        device_list.push_back(i);
+    }
+
+    this->device_list_ = device_list;
+    this->partition_indexing_ = getPartitionIndexing(number_of_partitions, this->getDimZ());
+
+    clock_t start_t;
+    clock_t end_t;
+    start_t = clock();
+
+    unsigned char* d_position_idx = NULL;
+    unsigned char* d_material_idx = NULL;
+
+    this->position_idx_ptr_.clear();
+    this->material_idx_ptr_.clear();
+
+    // Go through devices and copy the part to each
+    for(unsigned int k = 0; k < number_of_partitions; k ++) {
+      int i = this->device_list_.at(k);
+      cudaSetDevice(i);
+      mesh_size_t offset = this->partition_indexing_.at(k).at(0)*this->getDimXY();
+      mesh_size_t size = (mesh_size_t)this->partition_indexing_.at(k).size()*this->getDimXY();
+
+      if(number_of_partitions > 1) {
+        unsigned char* position_idx = valueToDevice(size+1+dim_x_, (unsigned char)0, i);
+        unsigned char* material_idx = valueToDevice(size+1+dim_x_, (unsigned char)0, i);
+        copyHostToDevice(size, position_idx, h_position_idx+offset, i);
+        copyHostToDevice(size, material_idx, h_material_idx+offset, i);
+
+        // Push the device pointer to containers
+        this->position_idx_ptr_.push_back(position_idx);
+        this->material_idx_ptr_.push_back(material_idx);
+      }
+      else {
+        mesh_size_t size = (mesh_size_t)this->partition_indexing_.at(0).size()*this->getDimXY();
+        d_position_idx = toDevice(size, h_position_idx, 0);
+        d_material_idx = toDevice(size, h_position_idx, 0);
+        this->position_idx_ptr_.push_back(d_position_idx);
+        this->material_idx_ptr_.push_back(d_material_idx);
+      }
+    } // End material / position partition
+
+    // Free the original meshes from device 0 if number of partitions is > 1
+    if(number_of_partitions > 1) {
+         destroyMem(d_position_idx);
+         destroyMem(d_material_idx);
+    }
+
+    // Go through devices and allocate pressures
+    for(unsigned int k = 0; k < number_of_partitions; k ++) {
+      int i = this->device_list_.at(k);
+      cudaSetDevice(i);
+      mesh_size_t size = (mesh_size_t)this->partition_indexing_.at(k).size()*this->getDimXY();
+
+      if(this->isDouble()) {
+        c_log_msg(LOG_DEBUG, "CudaMesh::makePartitionFromHost - allocating double pressures dev %u", i);
+        double* P = toDevice<double>(size+1+dim_x_, i);
+        double* P_past = toDevice<double>(size+1+dim_x_, i);
+
+        // Push the device pointers to containers
+        this->pressures_double_.push_back(P);
+        this->pressures_past_double_.push_back(P_past);
+
+        // Allocate and copy material coefficients to all devices
+        c_log_msg(LOG_DEBUG, "CudaMesh::makePartitionFromHost - allocating double materials");
+        this->materials_double_.push_back(toDevice<double>(this->number_of_unique_materials_*20,
+                                                            this->h_material_coef_ptr_double_,
+                                                            i));
+
+        // Allocate and copy simulation parameters to all devices
+        this->parameters_double_.push_back(toDevice<double>(4, this->h_parameter_ptr_double_, i));
+      }
+      else {
+        c_log_msg(LOG_DEBUG, "CudaMesh::makePartitionFromHost - allocating float pressures dev %u", i);
+        float* P = toDevice<float>(size+1+dim_x_, i);
+        float* P_past = toDevice<float>(size+1+dim_x_, i);
+        // Push the device pointers to containers
+        this->pressures_.push_back(P);
+        this->pressures_past_.push_back(P_past);
+        this->materials_.push_back(toDevice<float>(this->number_of_unique_materials_*20,
+                                                   this->h_material_coef_ptr_,
+                                                   i));
+        // Allocate and copy simulation parameters to all devices
+        this->parameters_.push_back(toDevice<float>(4, this->h_parameter_ptr_, i));
+      }
+    }// End partition loop
+
+    end_t = clock()-start_t;
+    c_log_msg(LOG_INFO,"CudaMesh::MakePartitionFromHost - time: %f seconds", ((float)end_t/CLOCKS_PER_SEC));
+
+  } // End make partition
 
   /// \brief switch halo layers between partitions
   void switchHalos() {
@@ -789,10 +936,10 @@ public:
     }
     cudasafe(cudaDeviceSynchronize(), "Device synch after reset pressures");
   }
-  
+
   /// \brief on hold
   void switchAirAndZero();
-  
+
   ///////////////////////////////////////////////////////////////////////////////
   /// Setup the mesh data structure with voxelized geometry, simulation parameters
   /// and material parameters
@@ -806,84 +953,100 @@ public:
   ///                     0: forward-difference, 1: centered-difference
   /// \return sample value in host memory
   ///////////////////////////////////////////////////////////////////////////////
-  void setupMesh(unsigned char* d_position_ptr,
-                 unsigned char* d_material_ptr,
-                 unsigned int number_of_unique_materials,
-                 float* material_coefficients,
-                 float* parameter_ptr,
+  template< typename T>
+  void setupMesh(unsigned int number_of_unique_materials,
+                 T* material_coefficients,
+                 T* parameter_ptr,
                  uint3 voxelization_dim,
-                 uint3 block_size, 
-                 unsigned int element_type);
-                 
-  ////////////////////////////////////////////////////////////////////////////////
-  /// Setup the mesh data structure with voxelized geometry, simulation parameters
-  /// and material parameters
-  /// \param d_position_ptr Position indices defining the orientation of each node
-  /// \param d_material_ptr Material indices defining the material index 
-  /// \param number_of_unique_materials Number of unique materials in the model
-  /// \param material_coefficients material parameters used in the model
-  /// \param voxelization_dim Dimensions of the voxelized geometry
-  /// \param block_size Block size used which is to be used running FDTD kernels
-  /// \param element_type Type of the position index
-  ///                     0: forward-difference, 1: centered-difference
-  /// \return sample value in host memory
-  ///////////////////////////////////////////////////////////////////////////////
-  void setupMeshDouble(unsigned char* d_position_ptr,
-                       unsigned char* d_material_ptr,
-                       unsigned int number_of_unique_materials,
-                       double* material_coefficients,
-                       double* parameter_ptr,
-                       uint3 voxelization_dim,
-                       uint3 block_size, 
-                       unsigned int element_type);
+                 uint3 block_size,
+                 unsigned int element_type) {
+    this->num_elements_ = voxelization_dim.x*voxelization_dim.y*voxelization_dim.z;
+    this->dim_x_ = voxelization_dim.x;
+    this->dim_y_ = voxelization_dim.y;
+    this->dim_z_ = voxelization_dim.z;
+    this->dim_xy_ = voxelization_dim.x*voxelization_dim.y;
+    this->block_size_x_ = block_size.x;
+    this->block_size_y_ = block_size.y;
+    this->block_size_z_ = block_size.z;
 
+    if(this->isDouble()) {
+      this->h_material_coef_ptr_double_ = reinterpret_cast<double*>(material_coefficients);
+      this->h_parameter_ptr_double_ = reinterpret_cast<double*>(parameter_ptr);
+    }
+    else {
+      this->h_material_coef_ptr_ = reinterpret_cast<float*>(material_coefficients);
+      this->h_parameter_ptr_ = reinterpret_cast<float*>(parameter_ptr);
+    }
+    this->number_of_unique_materials_ = number_of_unique_materials;
+
+    c_log_msg(LOG_INFO,
+              "CudaMesh::setupCudaMesh<%s>:- dim x: %d y: %d z: %d num elements %u",
+                (this->isDouble() ? "double" : "float"), voxelization_dim.x,
+                voxelization_dim.y, voxelization_dim.z, this->num_elements_);
+
+    c_log_msg(LOG_INFO, "CudaMesh::setupMesh<%s> done",
+            (this->isDouble() ? "double" : "float"));
+    printMemInfo("voxelizeGeometryDevice memory before return", getCurrentDevice());
+
+  }
+
+  void calculateBoundaries(const unsigned char* d_position_idx,
+                           unsigned char air_value,
+                           unsigned char out_value,
+                           unsigned char dev_idx = 0);
+
+  void calculateBoundariesHost(const unsigned char* h_position_idx,
+                               unsigned char air_value,
+                               unsigned char out_value);
 };
 
 /// \brief Pad the mesh with zeros
-/// \param[in, out] d_mesh a 
+/// \param[in, out] d_mesh a
 /// \param[in, out] dim Dimensions of the mesh
 /// \param block_size_x, block_size_y, block_size_z New block sizes in which the
 /// new mesh dimensions are rounded to
-void padWithZeros(unsigned char** d_mesh, uint3* dim, unsigned int block_size_x, 
+void padWithZeros(unsigned char** d_mesh, uint3* dim, unsigned int block_size_x,
                   unsigned int block_size_y, unsigned int block_size_z);
 
-void padWithZeros(unsigned char** d_position_ptr, unsigned char** d_material_ptr, uint3* dim, 
-                  unsigned int block_size_x, unsigned int block_size_y, 
+void padWithZeros(unsigned char** d_position_ptr, unsigned char** d_material_ptr, uint3* dim,
+                  unsigned int block_size_x, unsigned int block_size_y,
                   unsigned int block_size_z);
 /// \brief on hold
 //void addMesh(CudaMesh& mesh_1, CudaMesh& mesh2,
 //             int pos_x, int pos_y, int pos_z);
 
 //////// Kernels
-__global__ void padWithZerosKernel(unsigned char* d_mesh_new, 
+__global__ void padWithZerosKernel(unsigned char* d_mesh_new,
                                    unsigned char* d_mesh_old,
-                                   unsigned int dim_x, unsigned int dim_y, 
-                                   unsigned int dim_z, 
-                                   unsigned int block_x, unsigned int block_y, 
-                                   unsigned int block_z, 
+                                   unsigned int dim_x, unsigned int dim_y,
+                                   unsigned int dim_z,
+                                   unsigned int block_x, unsigned int block_y,
+                                   unsigned int block_z,
                                    unsigned int slice);
 
 /// \brief Kernel setting the position index values to centered-difference scheme
-__global__ void toKowalczykKernel(unsigned char* d_position_ptr, unsigned char* d_material_ptr, 
-                                  unsigned int num_elems);
+__global__ void toKowalczykKernel(unsigned char* d_position_ptr, unsigned char* d_material_ptr,
+                                  mesh_size_t num_elems);
 
 /// \brief Kernel setting the position index values to forward-difference scheme
-__global__ void toBilbaoKernel(unsigned char* d_position_ptr, unsigned char* d_material_ptr, 
-                               unsigned int num_elems);
+__global__ void toBilbaoKernel(unsigned char* d_position_ptr, unsigned char* d_material_ptr,
+                               mesh_size_t num_elems);
 
 /// \brief Kernel calculating the number of air and boundary nodes
-__global__ void calcBoundaries(unsigned char* d_position_ptr, 
-                               unsigned int* air, 
-                               unsigned int* boundary, 
-                               unsigned char air_value, 
+__global__ void calcBoundaries(const unsigned char* d_position_ptr,
+                               mesh_size_t* air,
+                               mesh_size_t* boundary,
+                               unsigned char air_value,
                                unsigned char outside_value,
-                               unsigned int num_elems);
-/// \brief on hold                               
-__global__ void getBoundaryIndicesKernel(unsigned char* d_position_ptr, 
+                               mesh_size_t num_elems);
+
+/// \brief on hold
+__global__ void getBoundaryIndicesKernel(unsigned char* d_position_ptr,
                                          unsigned int* d_indices,
-                                         unsigned char air, 
-                                         unsigned char out, 
+                                         unsigned char air,
+                                         unsigned char out,
                                          unsigned int* pos);
+
 /// \brief on hold
 __global__ void checkInnerCorners(unsigned char* d_position_ptr, int dim_xy, int dim_x);
 
@@ -891,14 +1054,14 @@ __global__ void checkInnerCorners(unsigned char* d_position_ptr, int dim_xy, int
 __global__ void switchAirAndZeroKernel(unsigned char* d_position_ptr, unsigned int dim_xy, unsigned int dim_x);
 
 /// \brief on hold
-__global__ void validateSolids(unsigned char* d_position_ptr, unsigned char* d_position_ptr_new, 
+__global__ void validateSolids(unsigned char* d_position_ptr, unsigned char* d_position_ptr_new,
                                unsigned char* d_material_ptr, int dim_x, int dim_xy, int dim_z);
 
-/// \brief on hold                               
-__global__ void validatePositionIndexes(unsigned char* d_position_ptr, unsigned char* d_position_ptr_new, 
+/// \brief on hold
+__global__ void validatePositionIndexes(unsigned char* d_position_ptr, unsigned char* d_position_ptr_new,
                                         unsigned char* d_material_ptr, int dim_x, int dim_xy, int dim_z);
-                                        
-/// \brief A kernel to add a mesh to another, on hold                                        
+
+/// \brief A kernel to add a mesh to another, on hold
 __global__ void addSourceMesh(unsigned char* d_position_ptr_room, unsigned char* d_position_ptr_source,
                               int dim_xy_room, int dim_x_room,
                               int dim_xy_source, int dim_x_source,

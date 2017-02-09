@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 //
 // This file is a part of the PadallelFDTD Finite-Difference Time-Domain
-// simulation library. It is released under the MIT License. You should have 
+// simulation library. It is released under the MIT License. You should have
 // received a copy of the MIT License along with ParallelFDTD.  If not, see
 // http://www.opensource.org/licenses/mit-license.php
 //
@@ -35,7 +35,7 @@ void SimulationParameters::readGridIr(std::string ir_fp) {
 void SimulationParameters::addSource(float x, float y, float z) {
     Source new_source = Source(x,y,z);
     nv::Vec3i element_idx = new_source.getElementIdx(this->getSpatialFs(), this->getC(), (float)this->getLambda());
-    log_msg<LOG_DEBUG>(L"SimulationParameters::addSource - Source added, element idx x: %u y: %u z: %u")
+    log_msg<LOG_VERBOSE>(L"SimulationParameters::addSource - Source added, element idx x: %u y: %u z: %u")
                        %element_idx.x % element_idx.y %element_idx.z;
 
     sources_.push_back(new_source);
@@ -43,8 +43,15 @@ void SimulationParameters::addSource(float x, float y, float z) {
 
 void SimulationParameters::addSource(Source src) {
     nv::Vec3i element_idx = src.getElementIdx(this->getSpatialFs(), this->getC(), (float)this->getLambda());
-    log_msg<LOG_DEBUG>(L"SimulationParameters::addSource - Source added, element idx x: %u y: %u z: %u")
+    log_msg<LOG_VERBOSE>(L"SimulationParameters::addSource - Source added, element idx x: %u y: %u z: %u")
                        %element_idx.x % element_idx.y %element_idx.z;
+    sources_.push_back(src);
+}
+
+void SimulationParameters::addSource_no_logging(Source src) {
+    nv::Vec3i element_idx = src.getElementIdx(this->getSpatialFs(), this->getC(), (float)this->getLambda());
+    //log_msg<LOG_DEBUG>(L"SimulationParameters::addSource - Source added, element idx x: %u y: %u z: %u")
+    //                   %element_idx.x % element_idx.y %element_idx.z;
     sources_.push_back(src);
 }
 
@@ -68,6 +75,24 @@ void SimulationParameters::updateReceiverAt(unsigned int i, Receiver rec) {
 
   this->receivers_.at(i) = rec;
 }
+
+void SimulationParameters::updateInputDataAt(unsigned int i, std::vector<float> data) {
+    log_msg<LOG_INFO>(L"SimulationParameters::updateInputDataAt - updating source data at : %d") %i;
+    if (i>=(unsigned int)this->source_input_data_.size()){
+      log_msg<LOG_ERROR>(L"SimulationParameters:updateInputDataAt : index %d out of range : %d") %i
+          %(this->source_input_data_.size()-1);
+    }
+    this->source_input_data_.at(i) = data;
+  };
+
+void SimulationParameters::updateInputDataDoubleAt(unsigned int i, std::vector<double> data) {
+    log_msg<LOG_INFO>(L"SimulationParameters::updateInputDataAt - updating source data at : %d") %i;
+    if (i>=(unsigned int)this->source_input_data_double_.size()){
+      log_msg<LOG_ERROR>(L"SimulationParameters:updateInputDataAt : index %d out of range : %d") %i
+          %(this->source_input_data_double_.size()-1);
+    }
+    this->source_input_data_double_.at(i) = data;
+  };
 
 void SimulationParameters::removeSource(unsigned int i) {
   unsigned int vector_size = (unsigned int)this->sources_.size();
@@ -96,15 +121,28 @@ void SimulationParameters::resetSourcesAndReceivers() {
   this->sources_.clear();
 }
 
+void SimulationParameters::resetReceivers() {
+  this->receivers_.clear();
+}
+
+void SimulationParameters::resetSources() {
+  this->sources_.clear();
+}
+
+void SimulationParameters::resetInputData() {
+  this->source_input_data_.clear();
+  this->source_input_data_double_.clear();
+}
+
 void SimulationParameters::addInputData(float* data, unsigned int number_of_samples) {
   if(!data) {
-    log_msg<LOG_WARNING>(L"SimulationParameters::addInputData : invalid input data (NULL)");  
+    log_msg<LOG_WARNING>(L"SimulationParameters::addInputData : invalid input data (NULL)");
   }
 
   std::vector<float> new_data;
   new_data.assign(number_of_samples, 0.f);
-  
-  if(data){ 
+
+  if(data){
     for(unsigned int i = 0; i < number_of_samples; i ++) {
       if(data+i)
         new_data.at(i) = data[i];
@@ -124,16 +162,21 @@ void SimulationParameters::setUpdateType(enum UpdateType update_type) {
   this->update_type_ = update_type;
   if(update_type == SRL) {
     log_msg<LOG_INFO>(L"SimulationParameters::setUpdateType - update type Standard Leapfrog Kowalczyk");
-    this->lambda_ = sqrt((double)1/3);
+    this->lambda_ = sqrt((double)1.0/3.0);
   }
   if(update_type == SRL_FORWARD) {
     log_msg<LOG_INFO>(L"SimulationParameters::setUpdateType - update type Standard Leapfrog Bilbao");
-    this->lambda_ = sqrt((double)1/3);
+    this->lambda_ = sqrt((double)1.0/3.0);
   }
   if(update_type == SHARED) {
     log_msg<LOG_INFO>(L"SimulationParameters::setUpdateType - update type SHARED");
-    this->lambda_ = sqrt((double)1/3);
+    this->lambda_ = sqrt((double)1.0/3.0);
   }
+}
+
+void SimulationParameters::setVoxelizationType(enum VoxelizationType voxelization_type) {
+  this->voxelization_type_ = voxelization_type;
+  log_msg<LOG_INFO>(L"SimulationParameters::Set Voxelization type %d") % (int)voxelization_type;
 }
 
 float SimulationParameters::getSourceSample(unsigned int source_idx, unsigned int step) {
@@ -198,7 +241,7 @@ float SimulationParameters::getGridIrDataSample(unsigned int sample) {
 }
 
 nv::Vec3i SimulationParameters::getSourceElementCoordinates(unsigned int source_idx) {
-  nv::Vec3i ret = this->getSource(source_idx).getElementIdx(this->getSpatialFs(), 
+  nv::Vec3i ret = this->getSource(source_idx).getElementIdx(this->getSpatialFs(),
                                   this->getC(),
                                   (float)this->getLambda());
   if(this->add_padding_to_element_idx_) {
@@ -211,7 +254,7 @@ nv::Vec3i SimulationParameters::getSourceElementCoordinates(unsigned int source_
 }
 
 nv::Vec3i SimulationParameters::getReceiverElementCoordinates(unsigned int receiver_idx) {
-  nv::Vec3i ret = this->getReceiver(receiver_idx).getElementIdx(this->getSpatialFs(), 
+  nv::Vec3i ret = this->getReceiver(receiver_idx).getElementIdx(this->getSpatialFs(),
                                     this->getC(),
                                     (float)this->getLambda());
   if(this->add_padding_to_element_idx_) {
@@ -223,7 +266,7 @@ nv::Vec3i SimulationParameters::getReceiverElementCoordinates(unsigned int recei
   return ret;
 }
 
-unsigned int SimulationParameters::getSourceElementIdx(unsigned int source_idx, 
+unsigned int SimulationParameters::getSourceElementIdx(unsigned int source_idx,
                                                        unsigned int dim_x,
                                                        unsigned int dim_y) {
   nv::Vec3i pos = this->getSourceElementCoordinates(source_idx);
@@ -240,11 +283,11 @@ unsigned int SimulationParameters::getSourceElementIdx(unsigned int source_idx,
   return pos.z*dim_x*dim_y+pos.y*dim_x+pos.x;
 }
 
-unsigned int SimulationParameters::getReceiverElementIdx(unsigned int receiver_idx, 
+unsigned int SimulationParameters::getReceiverElementIdx(unsigned int receiver_idx,
                                                          unsigned int dim_x,
                                                          unsigned int dim_y) {
 
-  nv::Vec3i pos = this->getReceiver(receiver_idx).getElementIdx(this->getSpatialFs(), 
+  nv::Vec3i pos = this->getReceiver(receiver_idx).getElementIdx(this->getSpatialFs(),
                                 this->getC(),
                                 (float)this->getLambda());
 
@@ -261,9 +304,9 @@ unsigned int SimulationParameters::getReceiverElementIdx(unsigned int receiver_i
 
 float SimulationParameters::getRegularSourceSample(unsigned int source_idx, unsigned int step) {
   float sample = 0.f;
-  
+
   switch(sources_.at(source_idx).getInputType()) {
-    case IMPULSE: 
+    case IMPULSE:
       {
       if(step == 1)
         sample += 1.f;
@@ -271,7 +314,7 @@ float SimulationParameters::getRegularSourceSample(unsigned int source_idx, unsi
         sample += 0.f;
       break;
       }
-    case GAUSSIAN: 
+    case GAUSSIAN:
       {
       float t0 = 40;
       float width = 4;
@@ -297,7 +340,7 @@ float SimulationParameters::getRegularSourceSample(unsigned int source_idx, unsi
   return sample;
 }
 
-float SimulationParameters::getTransparentSourceSample(unsigned int source_idx, 
+float SimulationParameters::getTransparentSourceSample(unsigned int source_idx,
                                                        unsigned int step) {
   float sample = 0.f;
 
@@ -311,9 +354,9 @@ float SimulationParameters::getTransparentSourceSample(unsigned int source_idx,
 
 double SimulationParameters::getRegularSourceSampleDouble(unsigned int source_idx, unsigned int step) {
   double sample = 0.0;
-  
+
   switch(sources_.at(source_idx).getInputType()) {
-    case IMPULSE: 
+    case IMPULSE:
       {
       if(step == 1)
         sample += 1.0;
@@ -321,7 +364,7 @@ double SimulationParameters::getRegularSourceSampleDouble(unsigned int source_id
         sample += 0.0;
       break;
       }
-    case GAUSSIAN: 
+    case GAUSSIAN:
       {
       double t0 = 40;
       double width = 4;
@@ -347,7 +390,7 @@ double SimulationParameters::getRegularSourceSampleDouble(unsigned int source_id
   return sample;
 }
 
-double SimulationParameters::getTransparentSourceSampleDouble(unsigned int source_idx, 
+double SimulationParameters::getTransparentSourceSampleDouble(unsigned int source_idx,
                                                               unsigned int step) {
   double sample = 0.f;
 
@@ -372,7 +415,7 @@ float* SimulationParameters::getSourceVectorAt(unsigned int source_idx) {
     sample_vector.at(i) = this->getSourceSample(source_idx, i);
   }
 
-  this->source_output_data_.at(source_idx) = sample_vector; 
+  this->source_output_data_.at(source_idx) = sample_vector;
   return &((this->source_output_data_.at(source_idx))[0]);
 }
 

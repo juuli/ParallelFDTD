@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////////////////////
 //
 // This file is a part of the PadallelFDTD Finite-Difference Time-Domain
-// simulation library. It is released under the MIT License. You should have 
+// simulation library. It is released under the MIT License. You should have
 // received a copy of the MIT License along with ParallelFDTD.  If not, see
 // http://www.opensource.org/licenses/mit-license.php
 //
@@ -23,167 +23,78 @@
 #include "cudaUtils.h"
 #include "cudaMesh.h"
 
-void CudaMesh::setupMesh(unsigned char* d_position_ptr,
-                         unsigned char* d_material_ptr,
-                         unsigned int number_of_unique_materials,
-                         float* material_coefficients,
-                         float* parameter_ptr,
-                         uint3 voxelization_dim,
-                         uint3 block_size, 
-                         unsigned int element_type) {
-  
-  clock_t start_t;
-  clock_t end_t;
-  start_t = clock();                            
-
-  // Pad the mesh to mach the block size of choice
-  padWithZeros(&d_position_ptr, 
-               &d_material_ptr, 
-               &voxelization_dim, 
-               block_size.x, 
-               block_size.y, 
-               block_size.z);
-
-  this->num_elements_ = voxelization_dim.x*voxelization_dim.y*voxelization_dim.z;
-  this->dim_x_ = voxelization_dim.x;
-  this->dim_y_ = voxelization_dim.y;
-  this->dim_z_ = voxelization_dim.z;
-  this->dim_xy_ = voxelization_dim.x*voxelization_dim.y;
-  this->block_size_x_ = block_size.x;
-  this->block_size_y_ = block_size.y;
-  this->block_size_z_ = block_size.z;
-  
-  this->h_material_coef_ptr_ = material_coefficients;
-  this->h_parameter_ptr_ = parameter_ptr;
-  
-  this->number_of_unique_materials_ = number_of_unique_materials;
-
-  this->position_idx_ptr_.push_back(d_position_ptr);
-  this->material_idx_ptr_.push_back(d_material_ptr);
-
-  c_log_msg(LOG_INFO, 
-            "CudaMesh::setupCudaMesh:- dim x: %d y: %d z: %d num elements %d",
-            voxelization_dim.x, voxelization_dim.y, voxelization_dim.z, this->num_elements_);
-
-  //////////// Translate the node data to given boundary formulation
-  start_t = clock();
-  if(element_type == 0 || element_type == 1 || element_type == 3)
-    this->toBilbaoScheme( );
-  else  
-    this->toKowalczykScheme();
-
-  end_t = clock()-start_t;
-  c_log_msg(LOG_INFO,"CudaMesh::Voxelization nodes to scheme done  - time: %f seconds",
-        ((float)end_t/CLOCKS_PER_SEC));
-
-  c_log_msg(LOG_INFO, "CudaMesh::Voxelization done");
-  printMemInfo("voxelizeGeometryDevice memory before return", getCurrentDevice());
-    
-  cudasafe(cudaPeekAtLastError(),
-           "CudaMesh::voxelizeGeometryToDevice:" 
-           "voxelizerDevice - peek before return");
-  
-  cudasafe(cudaDeviceSynchronize(), 
-           "CudaMesh::voxelizeGeometryToDevice:" 
-           "voxelizerDevice - cudaDeviceSynchronize at before return");  
-}
-
-
-void CudaMesh::setupMeshDouble(unsigned char* d_position_ptr,
-                               unsigned char* d_material_ptr,
-                               unsigned int number_of_unique_materials,
-                               double* material_coefficients,
-                               double* parameter_ptr,
-                               uint3 voxelization_dim,
-                               uint3 block_size, 
-                               unsigned int element_type) {
-  
-  clock_t start_t;
-  clock_t end_t;
-  start_t = clock();                            
-
-  // Pad the mesh to match the block size of choice
-  padWithZeros(&d_position_ptr, 
-               &d_material_ptr, 
-               &voxelization_dim, 
-               block_size.x, 
-               block_size.x, 
-               block_size.z);
-
-  this->num_elements_ = voxelization_dim.x*voxelization_dim.y*voxelization_dim.z;
-  this->dim_x_ = voxelization_dim.x;
-  this->dim_y_ = voxelization_dim.y;
-  this->dim_z_ = voxelization_dim.z;
-  this->dim_xy_ = voxelization_dim.x*voxelization_dim.y;
-  this->block_size_x_ = block_size.x;
-  this->block_size_y_ = block_size.y;
-  this->block_size_z_ = block_size.z;
-  
-  this->h_material_coef_ptr_double_ = material_coefficients;
-  this->h_parameter_ptr_double_ = parameter_ptr;
-  this->number_of_unique_materials_ = number_of_unique_materials;
-  this->position_idx_ptr_.push_back(d_position_ptr);
-  this->material_idx_ptr_.push_back(d_material_ptr);
-
-  c_log_msg(LOG_INFO, 
-            "CudaMesh::setupCudaMesh:- dim x: %d y: %d z: %d num elements %d",
-            voxelization_dim.x, voxelization_dim.y, voxelization_dim.z, this->num_elements_);
-
-  //////////// Translate the node data to given boundary formulation
-  start_t = clock();
-  if(element_type == 0 || element_type == 1)
-    this->toBilbaoScheme();
-  else  
-    this->toKowalczykScheme();
-
-  end_t = clock()-start_t;
-  c_log_msg(LOG_INFO,"CudaMesh::Voxelization nodes to scheme done  - time: %f seconds",
-        ((float)end_t/CLOCKS_PER_SEC));
-
-  c_log_msg(LOG_INFO, "CudaMesh::Voxelization done");
-  printMemInfo("voxelizeGeometryDevice memory before return", getCurrentDevice());
-    
-  cudasafe(cudaPeekAtLastError(),
-           "CudaMesh::voxelizeGeometryToDevice:" 
-           "voxelizerDevice - peek before return");
-  
-  cudasafe(cudaDeviceSynchronize(), 
-           "CudaMesh::voxelizeGeometryToDevice:" 
-           "voxelizerDevice - cudaDeviceSynchronize at before return");  
-}
-
-void CudaMesh::toKowalczykScheme() {
+void CudaMesh::toKowalczykScheme(unsigned char* d_pos, unsigned char* d_mat) {
   c_log_msg(LOG_INFO, "CudaMesh::toKowalczykScheme -  translate to kowalczyk");
-  
-  unsigned int num_elems = this->getNumberOfElements();
-  int threadsPerBlock = 512;
+
+  mesh_size_t num_elems = this->getNumberOfElements();
+  mesh_size_t threadsPerBlock = 512;
   dim3 block_dim(threadsPerBlock);
 
-  int numBlocks = (num_elems + threadsPerBlock - 1) / threadsPerBlock;
-  dim3 grid_dim((unsigned int)ceil(sqrt(numBlocks)), (unsigned int)ceil(sqrt(numBlocks))); 
+  unsigned int numBlocks = (num_elems + threadsPerBlock - 1) / threadsPerBlock;
+  dim3 grid_dim((unsigned int)ceil(sqrt(numBlocks)), (unsigned int)ceil(sqrt(numBlocks)));
 
-  c_log_msg(LOG_VERBOSE, "CudaMesh::nodes2KowalczykScheme - Grid x: %u y: %u z: %u", 
+  c_log_msg(LOG_VERBOSE, "CudaMesh::nodes2KowalczykScheme - Grid x: %u y: %u z: %u",
                           grid_dim.x, grid_dim.y, grid_dim.z);
-  
 
-  toKowalczykKernel<<<grid_dim, block_dim>>>(this->position_idx_ptr_.at(0), 
-                                             this->material_idx_ptr_.at(0), 
+  toKowalczykKernel<<<grid_dim, block_dim>>>(d_pos,
+                                             d_mat,
                                              num_elems);
 
-  // Calculate number of boundaries
-  unsigned int* h_air_elements = NULL;
-  unsigned int* h_boundary_elements = NULL;
+  cudasafe(cudaDeviceSynchronize(),
+           "CudaMesh::toKowalczykScheme - cudaDeviceSynchronize at before return");
+}
 
-  unsigned int* d_air_nodes = valueToDevice(1, (unsigned int)0, 0);
-  unsigned int* d_boundary_nodes = valueToDevice(1, (unsigned int)0, 0);
+void CudaMesh::toBilbaoScheme(unsigned char* d_pos, unsigned char* d_mat) {
+  c_log_msg(LOG_INFO, "CudaMesh::nodes2BilbaoScheme -  voxelizerDevice translate to bilbao");
 
-  calcBoundaries<<<grid_dim, block_dim>>>(this->position_idx_ptr_.at(0), 
-                                          d_air_nodes, d_boundary_nodes, 0x80, 0,
+  mesh_size_t num_elems = this->getNumberOfElements();
+
+  mesh_size_t threadsPerBlock = 512;
+  dim3 block_dim(threadsPerBlock);
+
+  unsigned int numBlocks = (num_elems + threadsPerBlock - 1) / threadsPerBlock;
+  dim3 grid_dim((unsigned int)ceil(sqrt(numBlocks)), (unsigned int)ceil(sqrt(numBlocks)));
+
+  c_log_msg(LOG_INFO, "CudaMesh::nodes2Bilbao - Grid x: %u y: %u z: %u",
+                         grid_dim.x, grid_dim.y, grid_dim.z);
+
+  toBilbaoKernel<<<grid_dim, block_dim>>>(d_pos,
+                                          d_mat,
                                           num_elems);
-  
-  h_air_elements = fromDevice(1, d_air_nodes,0);
-  h_boundary_elements= fromDevice(1, d_boundary_nodes,0);
-  
+
+  cudasafe(cudaDeviceSynchronize(),
+          "CudaMesh<LongNode>::nodes2BilbaoScheme - cudaDeviceSynchronize at before return");
+
+  printCheckSum(d_pos, this->num_elements_, (char*)"node2Bilbao - return");
+}
+
+void CudaMesh::calculateBoundaries(const unsigned char* d_position_idx,
+                                   unsigned char air_value,
+                                   unsigned char out_value,
+                                   unsigned char dev_idx) {
+
+  mesh_size_t* d_air_nodes = valueToDevice(1, (mesh_size_t)0, dev_idx);
+  mesh_size_t* d_boundary_nodes = valueToDevice(1, (mesh_size_t)0, dev_idx);
+
+  mesh_size_t num_elems = this->getNumberOfElements();
+  mesh_size_t threadsPerBlock = 512;
+  dim3 block_dim(threadsPerBlock);
+
+  unsigned int numBlocks = (num_elems + threadsPerBlock - 1) / threadsPerBlock;
+  dim3 grid_dim((unsigned int)ceil(sqrt(numBlocks)), (unsigned int)ceil(sqrt(numBlocks)));
+
+  calcBoundaries<<<grid_dim, block_dim>>>(d_position_idx,
+                                          d_air_nodes, d_boundary_nodes,
+                                          air_value, out_value, num_elems);
+  cudasafe(cudaPeekAtLastError(),
+    "CudaMesh::calculateBoundaries - peek before return");
+  cudasafe(cudaDeviceSynchronize(),
+    "CudaMesh::calculateBoundaries - "
+    "cudaDeviceSynchronize at before return");
+
+  mesh_size_t* h_air_elements = fromDevice(1, d_air_nodes,dev_idx);
+  mesh_size_t* h_boundary_elements= fromDevice(1, d_boundary_nodes,dev_idx);
+
   destroyMem(d_air_nodes);
   destroyMem(d_boundary_nodes);
 
@@ -192,66 +103,34 @@ void CudaMesh::toKowalczykScheme() {
   this->num_boundary_elements_total_ = *h_boundary_elements;
   free(h_air_elements);
   free(h_boundary_elements);
-
-  c_log_msg(LOG_DEBUG, "CudaMesh::toKowalczykScheme - air elements: %u boundary elements: %u",
-                        this->num_air_elements_total_, 
-                        this->num_boundary_elements_total_);
-
-  cudasafe(cudaDeviceSynchronize(), 
-           "CudaMesh::toKowalczykScheme - cudaDeviceSynchronize at before return");
-}
-
-void CudaMesh::toBilbaoScheme() {
-  c_log_msg(LOG_INFO, "CudaMesh::nodes2BilbaoScheme -  voxelizerDevice translate to bilbao");
-
-  unsigned int num_elems = this->getNumberOfElements();
-  
-  int threadsPerBlock = 512;
-  dim3 block_dim(threadsPerBlock);
-
-  int numBlocks = (num_elems + threadsPerBlock - 1) / threadsPerBlock;
-  dim3 grid_dim((unsigned int)ceil(sqrt(numBlocks)), (unsigned int)ceil(sqrt(numBlocks))); 
-
-  c_log_msg(LOG_INFO, "CudaMesh::nodes2Bilbao - Grid x: %u y: %u z: %u", 
-                         grid_dim.x, grid_dim.y, grid_dim.z);
-  
-  toBilbaoKernel<<<grid_dim, block_dim>>>(this->position_idx_ptr_.at(0), 
-                                          this->material_idx_ptr_.at(0), 
-                                          num_elems);
-  unsigned int* h_air_elements = NULL;
-  unsigned int* h_boundary_elements = NULL;
-
-  // Calculate number of boundaries
-  unsigned int* d_air_nodes = valueToDevice(1, (unsigned int)0, 0);
-  unsigned int* d_boundary_nodes = valueToDevice(1, (unsigned int)0, 0);
-
-  calcBoundaries<<<grid_dim, block_dim>>>(this->position_idx_ptr_.at(0), 
-                                          d_air_nodes, d_boundary_nodes, 0x86, 0,
-                                          num_elems);
-   
-  h_air_elements = fromDevice(1, d_air_nodes,0);
-  h_boundary_elements = fromDevice(1, d_boundary_nodes,0);
-  c_log_msg(LOG_INFO, "CudaMesh::nodes2Bilbao - returned air elems: %u, boundary: %u", *h_air_elements, *h_boundary_elements);
-
-  destroyMem(d_air_nodes);
-  destroyMem(d_boundary_nodes);
-  
-  this->num_air_elements_total_ = *h_air_elements;
-  this->num_boundary_elements_total_ = *h_boundary_elements;
-  free(h_air_elements);
-  free(h_boundary_elements);
-
-  c_log_msg(LOG_DEBUG, "CudaMesh::nodes2BilbaoScheme - air elements: %u boundary elements: %u",
+  c_log_msg(LOG_DEBUG, "CudaMesh::calculateBoundaries - air elements: %u boundary elements: %u",
         this->num_air_elements_total_, this->num_boundary_elements_total_);
-
-  cudasafe(cudaDeviceSynchronize(), 
-          "CudaMesh<LongNode>::nodes2BilbaoScheme - cudaDeviceSynchronize at before return");
-
-  printCheckSum(this->getPositionIdxPtrAt(0), this->num_elements_, "node2Bilbao - return");
 }
 
-void padWithZeros(unsigned char** d_mesh, uint3* dim, 
-                  unsigned int block_size_x, 
+void CudaMesh::calculateBoundariesHost(const unsigned char* h_position_idx,
+                                       unsigned char air_value,
+                                       unsigned char out_value) {
+  mesh_size_t num_air_elements = 0;
+  mesh_size_t num_boundary_elements = 0;
+  for(mesh_size_t i = 0; i < this->getNumberOfElements(); i++) {
+    if(h_position_idx[i] == air_value) {
+      num_air_elements++;
+    }
+    if(h_position_idx[i] != out_value && h_position_idx[i] != air_value) {
+      num_boundary_elements++;
+    }
+  }
+  this->num_air_elements_total_ = num_air_elements;
+  this->num_boundary_elements_total_ = num_boundary_elements;
+
+  c_log_msg(LOG_DEBUG, "CudaMesh::calculateBoundariesHost - "
+                       "air elements: %u boundary elements: %u",
+                       this->num_air_elements_total_,
+                       this->num_boundary_elements_total_);
+}
+
+void padWithZeros(unsigned char** d_mesh, uint3* dim,
+                  unsigned int block_size_x,
                   unsigned int block_size_y,
                   unsigned int block_size_z) {
 
@@ -274,16 +153,16 @@ void padWithZeros(unsigned char** d_mesh, uint3* dim,
     padZ += (block_size_z-((dim_z+padZ)%block_size_z));
 
   // New size with the padding
-  int newSize = (dim_x+padX)*(dim_y+padY)*(dim_z+padZ);
+  mesh_size_t newSize = (dim_x+padX)*(dim_y+padY)*(dim_z+padZ);
 
   unsigned char* d_mesh_new = valueToDevice(newSize, (unsigned char)0, 0);
-  
+
   dim3 block(block_size_x, block_size_y, block_size_z);
-  dim3 grid((int)ceil((float)(dim_x+padX)/(float)block.x), 
-            (int)ceil((float)(dim_y+padY)/(float)block.y), 
+  dim3 grid((int)ceil((float)(dim_x+padX)/(float)block.x),
+            (int)ceil((float)(dim_y+padY)/(float)block.y),
           dim_z);
 
-  padWithZerosKernel<<<grid, block>>>(d_mesh_new, *d_mesh, 
+  padWithZerosKernel<<<grid, block>>>(d_mesh_new, *d_mesh,
                                       dim_x, dim_y, dim_z,
                                       padX, padY, padZ, 0);
 
@@ -303,16 +182,16 @@ void padWithZeros(unsigned char** d_mesh, uint3* dim,
   *dim = dim_;
 }
 
-void padWithZeros(unsigned char** d_position_ptr, 
-                  unsigned char**d_material_ptr, 
-                  uint3* dim, 
-                  unsigned int block_size_x, 
-                  unsigned int block_size_y, 
+void padWithZeros(unsigned char** d_position_ptr,
+                  unsigned char**d_material_ptr,
+                  uint3* dim,
+                  unsigned int block_size_x,
+                  unsigned int block_size_y,
                   unsigned int block_size_z) {
 
   c_log_msg(LOG_INFO, "cudaUtils.cu: padWithZeros - Begin");
   uint3 dim_ = *dim;
-  
+
   padWithZeros(d_position_ptr, &dim_, block_size_x, block_size_y, block_size_z);
 
   dim_ = *dim;
@@ -325,7 +204,7 @@ void padWithZeros(unsigned char** d_position_ptr,
 
 }
 
-__host__ __device__ void toBilbao(unsigned char* d_position_ptr, 
+__host__ __device__ void toBilbao(unsigned char* d_position_ptr,
                                   unsigned char* d_material_ptr) {
   unsigned int k = (unsigned int)*d_position_ptr;
 
@@ -352,18 +231,19 @@ __host__ __device__ void toBilbao(unsigned char* d_position_ptr,
       *d_position_ptr |= 0x80;
       return;
     }
-    
+
     if(k ==27) {
       *d_position_ptr = (unsigned char)6;
       *d_position_ptr |= 0x80;
+      *d_material_ptr = 0;
       return;
     }
 }
 
-__host__ __device__ void toKowalczyk(unsigned char* d_position_ptr, 
+__host__ __device__ void toKowalczyk(unsigned char* d_position_ptr,
                                      unsigned char* d_material_ptr) {
   unsigned int k = (unsigned int)*d_position_ptr;
-  
+
   if(k == 0){
     *d_position_ptr = (unsigned char)0;
     *d_material_ptr = (unsigned char)0;
@@ -401,7 +281,7 @@ __host__ __device__ void toKowalczyk(unsigned char* d_position_ptr,
     *d_position_ptr = 0|SIGN_Y|SIGN_X|DIR_X|DIR_Y|DIR_Z|CENTERED_MASK;
     return;
   }
-  if(k == 9) { // 09 = Down, Left, Right, In 
+  if(k == 9) { // 09 = Down, Left, Right, In
     *d_position_ptr = 0|DIR_Y|DIR_Z|SIGN_Z|CENTERED_MASK;
     return;
   }
@@ -409,67 +289,67 @@ __host__ __device__ void toKowalczyk(unsigned char* d_position_ptr,
     *d_position_ptr = 0|DIR_Y|DIR_Z|SIGN_Z|SIGN_Y|CENTERED_MASK;
     return;
   }
-  if(k == 11) { // 11 = Down, Left, In, Out 
+  if(k == 11) { // 11 = Down, Left, In, Out
     *d_position_ptr = 0|DIR_X|DIR_Z|SIGN_Z|CENTERED_MASK;
     return;
   }
-  if(k == 12) { // 12 = Down, Right, In, Out 
+  if(k == 12) { // 12 = Down, Right, In, Out
     *d_position_ptr = 0|DIR_X|DIR_Z|SIGN_Z|SIGN_X|CENTERED_MASK;
     return;
   }
-  if(k == 13){ // 13 = Up, Left, Right, In 
+  if(k == 13){ // 13 = Up, Left, Right, In
     *d_position_ptr = 0|DIR_Y|DIR_Z|CENTERED_MASK;
     return;
   }
-  if(k == 14) { // 14 = Up, Left, Right, Out 
+  if(k == 14) { // 14 = Up, Left, Right, Out
     *d_position_ptr = 0|DIR_Y|DIR_Z|SIGN_Y|CENTERED_MASK;
     return;
   }
-  if(k == 15) { // 15 = Up, Left, In, Out 
+  if(k == 15) { // 15 = Up, Left, In, Out
     *d_position_ptr = 0|DIR_X|DIR_Z|CENTERED_MASK;
     return;
   }
-  if(k == 16) { // 16 = Up, Right, In, Out 
+  if(k == 16) { // 16 = Up, Right, In, Out
     *d_position_ptr = 0|DIR_X|DIR_Z|SIGN_X|CENTERED_MASK;
     return;
   }
-  if(k == 17) { // 17 = Up, Down, Left, In 
+  if(k == 17) { // 17 = Up, Down, Left, In
     *d_position_ptr = 0|DIR_Y|DIR_X|CENTERED_MASK;
     return;
   }
-  if(k == 18) { // 18 = Up, Down, Right, In 
+  if(k == 18) { // 18 = Up, Down, Right, In
     *d_position_ptr = 0|DIR_X|DIR_Y|SIGN_X|CENTERED_MASK;
     return;
   }
-  if(k == 19) { // 19 = Up, Down, Left, Out 
+  if(k == 19) { // 19 = Up, Down, Left, Out
     *d_position_ptr = 0|DIR_X|DIR_Y|SIGN_Y|CENTERED_MASK;
     return;
   }
-  if(k == 20) { // 20 = Up, Down, Right, Out 
+  if(k == 20) { // 20 = Up, Down, Right, Out
     *d_position_ptr = 0|DIR_Y|DIR_X|SIGN_Y|SIGN_X|CENTERED_MASK;
     return;
   }
-  if(k == 21) { // 21 = Left, Right, In, Out, Down 
+  if(k == 21) { // 21 = Left, Right, In, Out, Down
     *d_position_ptr = 0|DIR_Z|SIGN_Z|CENTERED_MASK;
     return;
   }
-  if(k == 22) { // 22 = Left, Right, Out, Down, Up 
+  if(k == 22) { // 22 = Left, Right, Out, Down, Up
     *d_position_ptr =  0|DIR_Y|SIGN_Y|CENTERED_MASK;
     return;
   }
-  if(k == 23) { // 23 = Left, Right, In, Down, Up 
+  if(k == 23) { // 23 = Left, Right, In, Down, Up
     *d_position_ptr = 0|DIR_Y|CENTERED_MASK;
     return;
   }
-  if(k == 24) { // 24 = Right, In, Out, Down, Up 
+  if(k == 24) { // 24 = Right, In, Out, Down, Up
     *d_position_ptr = 0|DIR_X|SIGN_X|CENTERED_MASK;
     return;
   }
-  if(k == 25) { // 25 = Left, In, Out, Down, Up 
+  if(k == 25) { // 25 = Left, In, Out, Down, Up
     *d_position_ptr = 0|DIR_X|CENTERED_MASK;
     return;
   }
-  if(k == 26) { // 26 = Left, Right, In, Out, Up 
+  if(k == 26) { // 26 = Left, Right, In, Out, Up
     *d_position_ptr = 0|DIR_Z|CENTERED_MASK;
     return;
   }
@@ -479,30 +359,31 @@ __host__ __device__ void toKowalczyk(unsigned char* d_position_ptr,
   }
 }
 
-__global__ void toKowalczykKernel(unsigned char* d_position_ptr, 
-                                  unsigned char* d_material_ptr, 
-                                  unsigned int num_elems) {
-  int idx = blockIdx.y * gridDim.x * blockDim.x + blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void toKowalczykKernel(unsigned char* d_position_ptr,
+                                  unsigned char* d_material_ptr,
+                                  mesh_size_t num_elems) {
+  mesh_size_t idx = blockIdx.y * gridDim.x * blockDim.x + blockIdx.x * blockDim.x + threadIdx.x;
   if(idx < num_elems) {
     toKowalczyk(d_position_ptr+idx, d_material_ptr+idx);
   }
 }
 
 
-__global__ void toBilbaoKernel(unsigned char* d_position_ptr, unsigned char* d_material_ptr, 
-                               unsigned int num_elems) {
-  int idx = blockIdx.y * gridDim.x * blockDim.x + blockIdx.x * blockDim.x + threadIdx.x;
+__global__ void toBilbaoKernel(unsigned char* d_position_ptr, unsigned char* d_material_ptr,
+                               mesh_size_t num_elems) {
+  mesh_size_t idx = blockIdx.y * gridDim.x * blockDim.x + blockIdx.x * blockDim.x + threadIdx.x;
   if(idx < num_elems) {
     toBilbao(d_position_ptr+idx, d_material_ptr+idx);
   }
 }
 
-__global__ void calcBoundaries(unsigned char* d_position_ptr, unsigned int* air, 
-                               unsigned int* boundary, 
-                               unsigned char air_value, 
+__global__ void calcBoundaries(const unsigned char* d_position_ptr,
+                               mesh_size_t* air,
+                               mesh_size_t* boundary,
+                               unsigned char air_value,
                                unsigned char outside_value,
-                               unsigned int num_elems) {
-  unsigned int idx = blockIdx.y * gridDim.x * blockDim.x + blockIdx.x * blockDim.x + threadIdx.x;
+                               mesh_size_t num_elems) {
+  mesh_size_t idx = blockIdx.y * gridDim.x * blockDim.x + blockIdx.x * blockDim.x + threadIdx.x;
   if(idx < num_elems) {
     if(d_position_ptr[idx] == air_value) {
       atomicAdd(air,1);
@@ -513,12 +394,12 @@ __global__ void calcBoundaries(unsigned char* d_position_ptr, unsigned int* air,
   }
 }
 
-__global__ void padWithZerosKernel(unsigned char* d_mesh_new, 
+__global__ void padWithZerosKernel(unsigned char* d_mesh_new,
                                    unsigned char* d_mesh_old,
-                                   unsigned int dim_x, unsigned int dim_y, 
-                                   unsigned int dim_z, 
-                                   unsigned int block_x, unsigned int block_y, 
-                                   unsigned int block_z, 
+                                   unsigned int dim_x, unsigned int dim_y,
+                                   unsigned int dim_z,
+                                   unsigned int block_x, unsigned int block_y,
+                                   unsigned int block_z,
                                    unsigned int slice) {
 
   unsigned int x = blockIdx.x*blockDim.x + threadIdx.x;
@@ -526,10 +407,9 @@ __global__ void padWithZerosKernel(unsigned char* d_mesh_new,
   unsigned int z = blockIdx.z;
 
   if(x < dim_x+1 && x > 0 && y < dim_y+1 &&  y > 0 && z < dim_z+1 && z > 0) {
-    unsigned int old_idx = (z)*(dim_x)*(dim_y)+(y)*dim_x+x;
-    unsigned int new_idx = z*(dim_x+block_x)*(dim_y+block_y)+y*(dim_x+block_x)+x;
+    mesh_size_t old_idx = (z)*(dim_x)*(dim_y)+(y)*dim_x+x;
+    mesh_size_t new_idx = z*(dim_x+block_x)*(dim_y+block_y)+y*(dim_x+block_x)+x;
 
     d_mesh_new[new_idx] = d_mesh_old[old_idx];
   }
 }
-

@@ -100,6 +100,12 @@ void updatePixelBuffer(struct cudaGraphicsResource **pbo_resource,
                 dim_xy, dim_y, num_elements, offset, orientation, scheme);
 
       }
+      if(selector == 3) {
+        unsigned char* d_M = d_mesh->getMaterialIdxPtrAt(i);
+        renderMaterialsPBO<<<grid, block>>>(pixel_ptr, d_M+slice_offset, dim_x, 
+                dim_xy, dim_y, num_elements, offset, orientation, scheme);
+
+      }
     }
   }
 
@@ -127,6 +133,117 @@ void captureMesh(CudaMesh* d_mesh,
     }// end capture loop
 }
 
+void captureCurrentSlice(CudaMesh* d_mesh,
+                         float** pressure_data,
+                         unsigned char** position_data,
+                         unsigned int slice_to_capture,
+                         unsigned int slice_orientation) {
+
+  uint3 block_ = make_uint3(0,0,0);
+  uint3 grid_ = make_uint3(0,0,0);
+  uint3 offset = make_uint3(0,0,0);
+
+  unsigned int slice = slice_to_capture;
+  unsigned int orientation = slice_orientation;
+  unsigned int num_partitions = d_mesh->getNumberOfPartitions();
+  unsigned int dim_x = d_mesh->getDimX();
+  unsigned int dim_y = d_mesh->getDimY();
+  unsigned int dim_z = d_mesh->getDimZ();
+  unsigned int dim_xy = d_mesh->getDimXY();
+
+  unsigned int slice_size = 0;
+  unsigned int slice_partition_size = 0;
+  //float* pressure_data = (float*)NULL;
+  //unsigned char* position_data = (unsigned char*)NULL;
+
+  if(orientation == 0 && dim_z < slice) {
+    c_log_msg(LOG_INFO, "visualizationUtils.cu: captureSliceFast - "
+                        "slice %u out of bounds %u, no capture made", slice, dim_z);
+    return;
+  }
+  if(orientation == 1 && dim_y < slice) {
+    c_log_msg(LOG_INFO, "visualizationUtils.cu: captureSliceFast - "
+                        "slice %u out of bounds %u, no capture made", slice, dim_y);
+    return;
+  }
+  if(orientation == 2 && dim_x < slice) {
+    c_log_msg(LOG_INFO, "visualizationUtils.cu: captureSliceFast - "
+                        "slice %u out of bounds %u, no capture made", slice, dim_x);
+    return;
+  }
+
+  // Define the block and grid size according to the slice orientation
+  switch(orientation) {
+    case 1: // xz
+      block_.x = d_mesh->getBlockX(); block_.y = 1; block_.z = d_mesh->getBlockZ();
+      grid_.x = d_mesh->getGridDimX(); grid_.y = 1; grid_.z = d_mesh->getDimZ()/d_mesh->getBlockZ()+1;
+      offset.x = 0; offset.y = slice; offset.z = 0;
+      slice_size = dim_x*dim_z;
+      slice_partition_size = dim_x*(d_mesh->getPartitionSize()-1);
+      *pressure_data = (float*)calloc(slice_size, sizeof(float));
+      *position_data = (unsigned char*)calloc(slice_size, sizeof(unsigned char));
+      break;
+
+    case 2: // yz
+      block_.x = 1; block_.y = d_mesh->getBlockY(); block_.z = d_mesh->getBlockZ();
+      grid_.x = 1; grid_.y = d_mesh->getGridDimY(); grid_.z = d_mesh->getDimZ()/d_mesh->getBlockZ()+1;
+      offset.x = slice; offset.y = 0; offset.z = 0;
+      slice_size = dim_y*dim_z;
+      slice_partition_size = dim_y*(d_mesh->getPartitionSize()-1);
+      *pressure_data = (float*)calloc(slice_size, sizeof(float));
+      *position_data = (unsigned char*)calloc(slice_size, sizeof(unsigned char));
+      break;
+  }// end switch
+
+  // z slice is a simple copy
+  if(orientation == 0){
+    *pressure_data  = d_mesh->getSlice<float>(slice, orientation);
+    *position_data = d_mesh->getPositionSlice(slice, orientation);
+  }
+  // Other planes have to be composed from different devices
+  else {
+    // Go through partitions
+    for(unsigned int j = 0; j < num_partitions; j++) {
+      int dev = d_mesh->getDeviceAt(j);
+      cudaSetDevice(dev);
+      int partition_size = (int)d_mesh->getPartitionSize(j);
+      unsigned int num_elements = d_mesh->getNumberOfElementsAt(j);
+ 
+      // Setup and launch kernel to capture slice
+      dim3 block(block_.x, block_.y, block_.z);
+      dim3 grid(grid_.x, grid_.y, grid_.z);
+
+      // If partition is not the first one, offset by slice
+      unsigned int slice_offset = (j == 0 ? 0 : dim_xy);
+      
+      // Get the pointers to the partition
+      float* d_P = d_mesh->getPressurePtrAt(j);
+      unsigned char* d_position_idx = d_mesh->getPositionIdxPtrAt(j);
+
+      // Allocate slices from device
+      float* d_capture_P = valueToDevice<float>(slice_size, 0.f, dev);
+      unsigned char* d_capture_position = valueToDevice<unsigned char>(slice_size, 0x0, dev);
+
+      captureSliceKernel<<<grid, block>>>(d_P+slice_offset, d_position_idx+slice_offset, 
+                                          d_capture_P, d_capture_position, num_elements,
+                                          dim_x, dim_y, dim_xy,
+                                          offset, slice_partition_size, orientation);
+      // Copy the slice data to host   
+      copyDeviceToHost<float>(slice_partition_size, 
+                              *pressure_data+(j*(slice_partition_size)), 
+                              d_capture_P, dev);
+      
+      copyDeviceToHost<unsigned char>(slice_partition_size, 
+                                      *position_data+(j*(slice_partition_size)), 
+                                      d_capture_position, dev);
+
+      // Destroy slice from the device
+      destroyMem<float>(d_capture_P, dev);
+      destroyMem<unsigned char>(d_capture_position, dev);
+    }
+  }
+}
+
 void captureSliceFast(CudaMesh* d_mesh,
                       std::vector<unsigned int> &step_to_capture,
                       std::vector<unsigned int> &slice_to_capture,
@@ -137,118 +254,32 @@ void captureSliceFast(CudaMesh* d_mesh,
   // Loop through the slices assigned for capturing
   for(unsigned int i = 0; i < step_to_capture.size(); i++) {
     if(current_step == step_to_capture.at(i)) {
-      uint3 block_ = make_uint3(0,0,0);
-      uint3 grid_ = make_uint3(0,0,0);
-      uint3 offset = make_uint3(0,0,0);
 
       unsigned int slice = slice_to_capture.at(i);
       unsigned int orientation = slice_orientation.at(i);
-      unsigned int num_partitions = d_mesh->getNumberOfPartitions();
-      unsigned int dim_x = d_mesh->getDimX();
-      unsigned int dim_y = d_mesh->getDimY();
-      unsigned int dim_z = d_mesh->getDimZ();
-      unsigned int dim_xy = d_mesh->getDimXY();
-   
-      unsigned int slice_size = 0;
-      unsigned int slice_partition_size = 0;
-      float* pressure_data = (float*)NULL;
-      unsigned char* position_data = (unsigned char*)NULL;
 
-      if(orientation == 0 && dim_z < slice) {
-        c_log_msg(LOG_INFO, "visualizationUtils.cu: captureSliceFast - slice %u out of bounds %u, no capture made", slice, dim_z);
-        return;
-      }
-      if(orientation == 1 && dim_y < slice) {
-        c_log_msg(LOG_INFO, "visualizationUtils.cu: captureSliceFast - slice %u out of bounds %u, no capture made", slice, dim_y);
-        return;
-      }
-      if(orientation == 2 && dim_x < slice) {
-        c_log_msg(LOG_INFO, "visualizationUtils.cu: captureSliceFast - slice %u out of bounds %u, no capture made", slice, dim_x);
-        return;
-      }
+      c_log_msg(LOG_INFO, "visualizationUtils.cu: captureSliceFast - "
+                          "capturing slice %d step %d",
+                          slice, current_step);
 
-      c_log_msg(LOG_INFO, "visualizationUtils.cu: captureSliceFast - capturing slice %d step %d",
-            slice, current_step);
-
-      // Define the block and grid size according to the slice orientation
-      switch(orientation) {
-        case 1: // xz
-          block_.x = d_mesh->getBlockX(); block_.y = 1; block_.z = d_mesh->getBlockZ();
-          grid_.x = d_mesh->getGridDimX(); grid_.y = 1; grid_.z = d_mesh->getDimZ()/d_mesh->getBlockZ()+1;
-          offset.x = 0; offset.y = slice; offset.z = 0;
-          slice_size = dim_x*dim_z;
-          slice_partition_size = dim_x*(d_mesh->getPartitionSize()-1);
-          pressure_data = (float*)calloc(slice_size, sizeof(float));
-          position_data = (unsigned char*)calloc(slice_size, sizeof(unsigned char));
-          break;
-
-        case 2: // yz
-          block_.x = 1; block_.y = d_mesh->getBlockY(); block_.z = d_mesh->getBlockZ();
-          grid_.x = 1; grid_.y = d_mesh->getGridDimY(); grid_.z = d_mesh->getDimZ()/d_mesh->getBlockZ()+1;
-          offset.x = slice; offset.y = 0; offset.z = 0;
-          slice_size = dim_y*dim_z;
-          slice_partition_size = dim_y*(d_mesh->getPartitionSize()-1);
-          pressure_data = (float*)calloc(slice_size, sizeof(float));
-          position_data = (unsigned char*)calloc(slice_size, sizeof(unsigned char));
-          break;
-      }// end switch
-
-      // z slice is a simple copy
-      if(orientation == 0){
-        pressure_data  = d_mesh->getSlice<float>(slice, orientation);
-        position_data = d_mesh->getPositionSlice(slice, orientation);
-      }
-      // Other planes have to be composed from different devices
-      else {
-        // Go through partitions
-        for(unsigned int j = 0; j < num_partitions; j++) {
-          int dev = d_mesh->getDeviceAt(j);
-          cudaSetDevice(dev);
-          int partition_size = (int)d_mesh->getPartitionSize(j);
-          unsigned int num_elements = d_mesh->getNumberOfElementsAt(j);
-     
-          // Setup and launch kernel to capture slice
-          dim3 block(block_.x, block_.y, block_.z);
-          dim3 grid(grid_.x, grid_.y, grid_.z);
-
-          // If partition is not the first one, offset by slice
-          unsigned int slice_offset = (j == 0 ? 0 : dim_xy);
-          
-          // Get the pointers to the partition
-          float* d_P = d_mesh->getPressurePtrAt(j);
-          unsigned char* d_position_idx = d_mesh->getPositionIdxPtrAt(j);
-
-          // Allocate slices from device
-          float* d_capture_P = valueToDevice<float>(slice_size, 0.f, dev);
-          unsigned char* d_capture_position = valueToDevice<unsigned char>(slice_size, 0x0, dev);
-
-          captureSliceKernel<<<grid, block>>>(d_P+slice_offset, d_position_idx+slice_offset, 
-                                              d_capture_P, d_capture_position, num_elements,
-                                              dim_x, dim_y, dim_xy,
-                                              offset, slice_partition_size, orientation);
-          // Copy the slice data to host   
-          copyDeviceToHost<float>(slice_partition_size, 
-                                  pressure_data+(j*(slice_partition_size)), 
-                                  d_capture_P, dev);
-          
-          copyDeviceToHost<unsigned char>(slice_partition_size, 
-                                          position_data+(j*(slice_partition_size)), 
-                                          d_capture_position, dev);
-
-          // Destroy slice from the device
-          destroyMem<float>(d_capture_P, dev);
-          destroyMem<unsigned char>(d_capture_position, dev);
-        }
-      }
       unsigned int d_x = 0;
       unsigned int d_y = 0;
       if(orientation == 0) {d_x = d_mesh->getDimX(); d_y = d_mesh->getDimY();};
       if(orientation == 1) {d_x = d_mesh->getDimX(); d_y = d_mesh->getDimZ();};
       if(orientation == 2) {d_x = d_mesh->getDimY(); d_y = d_mesh->getDimZ();};
 
-      captureCallback(pressure_data, position_data, d_x, d_y, slice, orientation, current_step);
+      float* pressure_data = NULL;
+      unsigned char* position_data = NULL;
+
+      captureCurrentSlice(d_mesh, &pressure_data, &position_data, 
+                          slice, orientation);
+
+      captureCallback(pressure_data, position_data, d_x, d_y, slice, 
+                      orientation, current_step);
+
       free(pressure_data);
       free(position_data);
+
     }// end step if
   }// end step loop
 }// end function
@@ -379,7 +410,45 @@ __global__ void renderSwitchPBO(uchar4* pixels, unsigned char* K, unsigned int d
   }
 }
 
+/// Render the inside/outside switch bit
+__global__ void renderMaterialsPBO(uchar4* pixels, unsigned char* M, unsigned int dim_x,
+                                  unsigned int dim_xy, unsigned int dim_y, unsigned int num_elems,
+                                  uint3 offset, unsigned int orientation,
+                                  unsigned int scheme) {
 
+  unsigned int x = blockIdx.x*blockDim.x + threadIdx.x + offset.x;
+  unsigned int y = blockIdx.y*blockDim.y + threadIdx.y + offset.y;
+  unsigned int z = blockIdx.z*blockDim.z + threadIdx.z + offset.z;
+  unsigned int idx = z*dim_xy+y*dim_x+x;
+
+  if(idx < num_elems) {
+    unsigned char mat = (M[z*dim_xy+y*dim_x+x]);//*2000.f;
+    uchar4 color;
+
+    if(mat == 0)
+      color = make_uchar4(0, 0, 0, 255);
+    if(mat == 1)
+      color = make_uchar4(255, 0, 0, 255);
+    if(mat == 2)
+      color = make_uchar4(0, 255, 0, 255);
+    if(mat == 3)
+      color = make_uchar4(0, 0, 255, 255);
+
+      if(orientation == 0) {
+        idx = y*dim_x + x;
+        pixels[idx] = color;
+      }
+      if(orientation == 1) {
+        idx = z*dim_x + x;
+        pixels[idx] = color;
+
+      }
+      if(orientation == 2) {
+        idx = z*dim_y + y;
+        pixels[idx] = color;
+      }
+  }
+}
 ////// VBO render functions, 3D visualization
 void renderBoundariesVBO(struct cudaGraphicsResource **vbo_resource, 
                          struct cudaGraphicsResource **color_resource,
