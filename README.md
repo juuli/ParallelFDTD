@@ -4,14 +4,15 @@ Parallel FDTD
 A FDTD solver for room acoustics using CUDA.
 
 ### Dependencies
-- Boost Libraries, tested on 1.53.0 and 1.55.0,  http://www.boost.org/users/history/version_1_55_0.html, Accessed May 2014
-- CUDA 5.0-8.0, tested on compute capability 3.0 - 3.7
+- Boost Libraries, tested on 1.53.0, 1.55.0 and 1.56.00,  http://www.boost.org/users/history/version_1_55_0.html, Accessed May 2014
+- CUDA 5.0-8.0, tested on compute capability 3.0 - 3.7, 5.2, 6.1
+If visualization is compiled (set 'BUILD_VISUALIZATION' cmake flag - see below):
 - Freeglut,  http://freeglut.sourceforge.net/ , Accessed May 2014  
 - GLEW, tested on 1.9.0, http://glew.sourceforge.net/, Accessed May 2014  
 
 ### For MPI execution
-- HDF5 libraries
-- HDF5 for python (https://pypi.python.org/pypi/h5py accessed January 11. 2017)
+- HDF5 libraries (serial libraries: hdf5 & hdf5_hl ; https://support.hdfgroup.org/HDF5/ )
+- HDF5 for python (https://pypi.python.org/pypi/h5py accessed January 11. 2016)
 
 ## For the Python interface
 - Python 2.7
@@ -26,11 +27,23 @@ Compiling
 =========
 To make sure the cmake is able to find the dependencies, it is highly possible that the cmake file at /ParallelFDTD/CMakeLists.txt has to edited to make the library and include directories match the system in use.
 
-The compilation has been tested on Ubuntu 14.04 LTS with GCC 4.8.4, CentOS 6, CentOS 7 with GCC 4.8.5.
+The compilation has been tested on:
+- Ubuntu 14.04 LTS with GCC 4.8.4, CentOS 6, CentOS 7 with GCC 4.8.5
+- Windows 7, Windows 10 with vc120, vc140 compilers
 
 ###1. Download and install the dependencies  
 
 ### 2. Clone and build the voxelizer library from https://github.com/hakarlss/Voxelizer  
+
+Depending on the GPU card you have, add the CUDA compute capabilities to the compilation flags of the CMakeLists.txt file. An example for 6.1 compute capability:
+```
+set( CUDA_NVCC_FLAGS_RELEASE ${CUDA_NVCC_FLAGS_RELEASE};
+                             -gencode arch=compute_61,code=sm_61 
+[...]
+set( CUDA_NVCC_FLAGS_DEBUG ${CUDA_NVCC_FLAGS_DEBUG};
+                             -gencode arch=compute_61,code=sm_61 
+```
+
 
 ```
 2.1 go to the folder of the repository  
@@ -39,6 +52,26 @@ The compilation has been tested on Ubuntu 14.04 LTS with GCC 4.8.4, CentOS 6, Ce
 2.4 cd build  
 ```
 ### WINDOWS
+
+You might have to set the boost variables in cmake:
+
+```
+set( BOOST_ROOT "C:/Program Files/boost/boost_1_55_0" )
+set( Boost_INCLUDE_DIRS ${BOOST_ROOT})
+set( BOOST_LIBRARYDIR ${BOOST_ROOT}/lib)
+set( Boost_COMPILER "-vc140" )
+set( BOOST_LIBRARYDIR /usr/lib64)
+```
+Depending on the GPU card you have, add the CUDA compute capabilities to the compilation flags of the CMakeLists.txt file. An example for 6.1 compute capability:
+```
+set( CUDA_NVCC_FLAGS_RELEASE ${CUDA_NVCC_FLAGS_RELEASE};
+                             -gencode arch=compute_61,code=sm_61 
+[...]
+set( CUDA_NVCC_FLAGS_DEBUG ${CUDA_NVCC_FLAGS_DEBUG};
+                             -gencode arch=compute_61,code=sm_61 
+```
+
+Then open a VSxxxx (x64) Native Tools command prompt and follow the instructions:
 
 ```
 2.5 cmake -G"NMake Makefiles" -DCMAKE_BUILD_TYPE=release ../  
@@ -71,6 +104,28 @@ with the cmake command.
 ```
 
 ### WINDOWS
+
+First copy the "Voxelizer.lib" library to the the ParallelFDTD folder\lib. 
+
+You might have to set the boost variables in cmake:
+
+```
+set( BOOST_ROOT "C:/Program Files/boost/boost_1_55_0" )
+set( Boost_INCLUDE_DIRS ${BOOST_ROOT})
+set( BOOST_LIBRARYDIR ${BOOST_ROOT}/lib)
+set( Boost_COMPILER "-vc140" )
+set( BOOST_LIBRARYDIR /usr/lib64)
+```
+Depending on the GPU card you have, add the CUDA compute capabilities to the compilation flags of the CMakeLists.txt file. An example for 6.1 compute capability:
+```
+set( CUDA_NVCC_FLAGS_RELEASE ${CUDA_NVCC_FLAGS_RELEASE};
+                             -gencode arch=compute_61,code=sm_61 
+[...]
+set( CUDA_NVCC_FLAGS_DEBUG ${CUDA_NVCC_FLAGS_DEBUG};
+                             -gencode arch=compute_61,code=sm_61 
+```
+
+Then open a VSxxxx (x64) Native Tools command prompt and follow the instructions:
 
 ```
 4.5 cmake -G"NMake Makefiles" -DCMAKE_BUILD_TYPE=release ../  
