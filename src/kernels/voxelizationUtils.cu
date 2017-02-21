@@ -38,7 +38,7 @@ void nodes2Vectors(vox::LongNode* nodes,
                    uint3 dim) {
 
   c_log_msg(LOG_INFO, "voxelizationUtils.cu: nodes2Vectors -  begin");
-  unsigned int num_elems = dim.x*dim.y*dim.z;
+  mesh_size_t num_elems = (mesh_size_t)dim.x*(mesh_size_t)dim.y*(mesh_size_t)dim.z;
 
   int threadsPerBlock = 512;
   dim3 block_dim(threadsPerBlock);
@@ -67,7 +67,7 @@ unsigned char nodes2Vectors_surface_only(vox::SurfaceNode* nodes,
                                 unsigned int number_of_unique_materials) {
 
   c_log_msg(LOG_INFO, "voxelizationUtils.cu: nodes2Vectors_surface_only -  begin");
-  unsigned int num_elems = dim.x*dim.y*dim.z;
+  mesh_size_t num_elems = (mesh_size_t)dim.x*(mesh_size_t)dim.y*(mesh_size_t)dim.z;
 
   unsigned int threadsPerBlock = 512;
   dim3 block_dim(threadsPerBlock); // block_dim.x = threadsPerBlock; block_dim.y = 1; block_dim.z = 1
@@ -90,8 +90,8 @@ unsigned char nodes2Vectors_surface_only(vox::SurfaceNode* nodes,
   cudaMemset(	d_pos_temp + num_elems + dim.x*dim.y, 1, dim.x*dim.y*sizeof(unsigned char));
   nodes2Vectors_prepare_surface_data_Kernel<<<grid_dim, block_dim>>>(nodes,
                                                                      surface_nodes_HM,
-                                                                     d_pos_temp + (int)dim.x*dim.y,
-                                                                     d_mat_temp + (int)dim.x*dim.y,
+                                                                     d_pos_temp + (mesh_size_t)dim.x*dim.y,
+                                                                     d_mat_temp + (mesh_size_t)dim.x*dim.y,
                                                                      num_elems);
 
   // Now, all air nodes have a d_pos_temp = 1 (d_mat_temp = 0) and all boundary
@@ -104,8 +104,8 @@ unsigned char nodes2Vectors_surface_only(vox::SurfaceNode* nodes,
       grid_dim.x, grid_dim.y, grid_dim.z);
 
   // Prepare data:
-  unsigned int dim_xy = dim.x*dim.y;
-  unsigned int dim_x = dim.x;
+  mesh_size_t dim_xy = (mesh_size_t)dim.x*(mesh_size_t)dim.y;
+  long long dim_x = dim.x;
   double one_over_dim_xy = 1.0 / (double)dim_xy;
   double one_over_dim_x = 1.0 / (double)dim.x;
   // Build a hash: maps material_id to its index: (vox::HashMap needs a .fromHosttoDevice() method)
@@ -120,10 +120,10 @@ unsigned char nodes2Vectors_surface_only(vox::SurfaceNode* nodes,
   c_log_msg(LOG_DEBUG, "voxelizationUtils.cu: Count_Air_Neighboring_Nodes - "
         "Max_material_ID = %u, dim_xy = %u, dim_x = %u", max_, dim_xy, dim_x);
   // Call it:
-  Count_Air_Neighboring_Nodes_Kernel<<<grid_dim, block_dim>>>(*d_pos + (int)dim.x*dim.y,
+  Count_Air_Neighboring_Nodes_Kernel<<<grid_dim, block_dim>>>(*d_pos + (mesh_size_t)dim.x*dim.y,
                                                               d_pos_temp,
-                                *d_mat + (int)dim.x*dim.y,
-                                max_,
+                                                              *d_mat + (mesh_size_t)dim.x*dim.y,
+                                                              max_,
                                                               d_mat_temp,
                                                               num_elems,
                                                               dim_xy,
@@ -131,7 +131,7 @@ unsigned char nodes2Vectors_surface_only(vox::SurfaceNode* nodes,
                                                               one_over_dim_xy,
                                                               one_over_dim_x,
                                                               bit_mask,
-                                d_error);
+                                                              d_error);
 
   cudasafe(cudaDeviceSynchronize(), "voxelizationUtils.cu: nodes2Vectors_surface_only - cudaDeviceSynchronize after air counts");
   // Check errors:
@@ -156,7 +156,7 @@ unsigned char to_ParallelFDTD_surface_voxelization(
   // nodes have a d_pos_temp = 0 with a corresponding material_id in d_mat_temp.
   // Keep the same of the domain Prepare new Kernel call for Count_Air_Neighboring_Nodes_Kernel()
   c_log_msg(LOG_INFO, "voxelizationUtils.cu: to_ParallelFDTD_surface_voxelization() - begin");
-  unsigned int num_elems = dim.x*dim.y*dim.z;
+  mesh_size_t num_elems = (mesh_size_t)dim.x*(mesh_size_t)dim.y*(mesh_size_t)dim.z;
 
   unsigned int threadsPerBlock = 512;
   dim3 block_dim(threadsPerBlock); // block_dim.x = threadsPerBlock; block_dim.y = 1; block_dim.z = 1
@@ -179,8 +179,8 @@ unsigned char to_ParallelFDTD_surface_voxelization(
   d_pos_temp = toDevice<unsigned char>(num_elems, dev_idx);
   d_mat_temp = toDevice<unsigned char>(num_elems, dev_idx);
 
-  unsigned int dim_xy = dim.x*dim.y;
-  unsigned int dim_x = dim.x;
+  mesh_size_t dim_xy = (mesh_size_t)dim.x*(mesh_size_t)dim.y;
+  long long dim_x = dim.x;
   double one_over_dim_xy = 1.0 / (double)dim_xy;
   double one_over_dim_x = 1.0 / (double)dim.x;
   // Build a hash: maps material_id to its index: (vox::HashMap needs a .fromHosttoDevice() method)
@@ -195,18 +195,18 @@ unsigned char to_ParallelFDTD_surface_voxelization(
   d_error = valueToDevice<unsigned char>(1, 0, dev_idx);
   c_log_msg(LOG_DEBUG, "voxelizationUtils.cu: Count_Air_Neighboring_Nodes - "
       "Max_material_ID = %u, dim_xy = %u, dim_x = %u", max_, dim_xy, dim_x);
-
-  Count_Air_Neighboring_Nodes_Kernel<<<grid_dim, block_dim>>>(*d_pos + (int)dim.x*dim.y,
+  // Call it:
+  Count_Air_Neighboring_Nodes_Kernel<<<grid_dim, block_dim>>>(*d_pos + (mesh_size_t)dim.x*dim.y,
                                                               d_pos_temp,
-                                                              *d_mat + (int)dim.x*dim.y,
+                                                              *d_mat + (mesh_size_t)dim.x*dim.y,
                                                               max_,
-                                                                                            d_mat_temp,
-                                                                                            num_elems,
-                                                                                            dim_xy,
-                                                                                            dim_x,
-                                                                                            one_over_dim_xy,
-                                                                                            one_over_dim_x,
-                                                                                            bit_mask,
+                                                              d_mat_temp,
+                                                              num_elems,
+                                                              dim_xy,
+                                                              dim_x,
+                                                              one_over_dim_xy,
+                                                              one_over_dim_x,
+                                                              bit_mask,
                                                               d_error);
 
   cudasafe(cudaDeviceSynchronize(), "voxelizationUtils.cu: to_ParallelFDTD_surface_voxelization() - cudaDeviceSynchronize after air counts");
@@ -266,7 +266,8 @@ void voxelizeGeometry(float* vertices,
            "voxelizationUtils: voxelizeGeometryToDevice - cudaDeviceSynchronize after voxelization");
 
   *voxelization_dim = node_ptr.at(0).dim;
-  unsigned int num_elements = (*voxelization_dim).x*(*voxelization_dim).y*(*voxelization_dim).z;
+  mesh_size_t num_elements = (mesh_size_t)(*voxelization_dim).x*
+          (mesh_size_t)(*voxelization_dim).y*(mesh_size_t)(*voxelization_dim).z;
 
   end_t = clock()-start_t;
   c_log_msg(LOG_INFO,
@@ -274,7 +275,8 @@ void voxelizeGeometry(float* vertices,
             ((float)end_t/CLOCKS_PER_SEC));
 
   // Allocate an additional buffer for indexing out of bounds
-  unsigned int buffer =  (*voxelization_dim).x*(*voxelization_dim).y+(*voxelization_dim).x+1;
+  mesh_size_t buffer =  (mesh_size_t)(*voxelization_dim).x*
+          (mesh_size_t)(*voxelization_dim).y+(mesh_size_t)(*voxelization_dim).x+1;
   (*d_position_idx) = valueToDevice<unsigned char>(num_elements+buffer, (unsigned char)0, 0);
   (*d_material_idx) = valueToDevice<unsigned char>(num_elements+buffer, (unsigned char)0, 0);
 
@@ -350,14 +352,16 @@ unsigned char voxelizeGeometry_solid(float* vertices,
            "voxelizationUtils: voxelizeGeometryToDevice Solid - cudaDeviceSynchronize after voxelization");
 
   *voxelization_dim = node_ptr.at(0).dim;
-  unsigned int num_elements = (*voxelization_dim).x*(*voxelization_dim).y*(*voxelization_dim).z;
+  mesh_size_t num_elements = (mesh_size_t)(*voxelization_dim).x*
+          (mesh_size_t)(*voxelization_dim).y*(mesh_size_t)(*voxelization_dim).z;
 
   end_t = clock()-start_t;
   c_log_msg(LOG_INFO,
             "voxelizationUtils.cu: voxelizeGeometryToDevice Solid, voxelization time: %f seconds",
             ((float)end_t/CLOCKS_PER_SEC));
   // Allocate an additional buffer for indexing out of bounds (somehow the zero-padding fails without this one)
-  unsigned int buffer =  (*voxelization_dim).x*(*voxelization_dim).y+(*voxelization_dim).x+1;
+  mesh_size_t buffer =  (mesh_size_t)(*voxelization_dim).x*
+          (mesh_size_t)(*voxelization_dim).y+(mesh_size_t)(*voxelization_dim).x+1;
   (*d_position_idx) = valueToDevice<unsigned char>(num_elements+buffer, (unsigned char)0, 0);
   (*d_material_idx) = valueToDevice<unsigned char>(num_elements+buffer, (unsigned char)0, 0);
 
@@ -368,7 +372,9 @@ unsigned char voxelizeGeometry_solid(float* vertices,
   // nodes2Vectors(nodes, d_position_idx, d_material_idx, *voxelization_dim);
   start_t = clock();
 
-  int cut_voxelized_shapes_by = 1; // In voxels; 1 is normal since we only need one extra layer of voxels surrounding the conservative bounding box of the domain and the voxelizer pads the domain by 2 voxels.
+  int cut_voxelized_shapes_by = 1; // In voxels; 1 is normal since we only need one extra layer
+  // of voxels surrounding the conservative bounding box of the domain and the voxelizer pads
+  // the domain by 2 voxels.
   c_log_msg(LOG_INFO, "voxelizationUtils.cu: nodes2Vectors_new_shape -  begin");
   // Check for overflow:
   if ( ((*voxelization_dim).y > UINT_MAX / (*voxelization_dim).z ) ||
@@ -377,9 +383,12 @@ unsigned char voxelizeGeometry_solid(float* vertices,
      "Overflow of number of nodes! Kernels designed to support up to %u nodes", UINT_MAX);
     throw 3;
   }
-  unsigned int num_elems_new = (*voxelization_dim).x*((*voxelization_dim).y-1)*((*voxelization_dim).z-1);
+  mesh_size_t num_elems_new = (mesh_size_t)(*voxelization_dim).x*
+          ((mesh_size_t)(*voxelization_dim).y-1)*((mesh_size_t)(*voxelization_dim).z-1);
 
-  int threadsPerBlock_ = 512; // the _ postfix for variables threadsPerBlock_, block_dim_numBlocks_, grid_dim_ creates useless variables that can be reused afterwards (without the _ at the end)
+  int threadsPerBlock_ = 512; // the _ postfix for variables threadsPerBlock_,
+  //  block_dim_numBlocks_, grid_dim_ creates useless variables that can be
+  //  reused afterwards (without the _ at the end)
   dim3 block_dim_(threadsPerBlock_);
 
   int numBlocks_ = (num_elems_new + threadsPerBlock_ - 1) / threadsPerBlock_;
@@ -389,10 +398,11 @@ unsigned char voxelizeGeometry_solid(float* vertices,
     block_dim_.x, block_dim_.y, block_dim_.z);
   c_log_msg(LOG_DEBUG, "voxelizationUtils.cu: nodes2Vectors_new_shape - Grid x: %u y: %u z: %u",
     grid_dim_.x, grid_dim_.y, grid_dim_.z);
-  int dim_xy_old = (*voxelization_dim).x*(*voxelization_dim).y;
-  int dim_x_old = (*voxelization_dim).x;
-  int dim_xy_new = (*voxelization_dim).x*((*voxelization_dim).y-cut_voxelized_shapes_by);
-  int dim_x_new = (*voxelization_dim).x;
+  mesh_size_t dim_xy_old = (mesh_size_t)(*voxelization_dim).x*(mesh_size_t)(*voxelization_dim).y;
+  long long dim_x_old = (*voxelization_dim).x;
+  mesh_size_t dim_xy_new = (mesh_size_t)(*voxelization_dim).x*
+          ((mesh_size_t)(*voxelization_dim).y-cut_voxelized_shapes_by);
+  long long dim_x_new = (*voxelization_dim).x;
   double one_over_dim_xy_new = 1.0 / (double)dim_xy_new;
   double one_over_dim_x_new = 1.0 / (double)dim_x_new;
 
@@ -410,7 +420,8 @@ unsigned char voxelizeGeometry_solid(float* vertices,
 
   (*voxelization_dim).y -= cut_voxelized_shapes_by;
   (*voxelization_dim).z -= cut_voxelized_shapes_by;
-  num_elements = (*voxelization_dim).x*(*voxelization_dim).y*(*voxelization_dim).z; // recalculate this:
+  num_elements = (mesh_size_t)(*voxelization_dim).x*
+          (mesh_size_t)(*voxelization_dim).y*(mesh_size_t)(*voxelization_dim).z; // recalculate this:
   end_t = clock()-start_t;
 
   c_log_msg(LOG_INFO,"voxelizationUtils.cu: nodes2Vectors_new_shape Solid - time: %f seconds",
@@ -436,7 +447,8 @@ unsigned char voxelizeGeometry_solid(float* vertices,
                voxelize_for_block_size.z);
 
   c_log_msg(LOG_INFO, "voxelizationUtils.cu: voxelizeGeometryToDevice Solid - zero padding done");
-  num_elements = (*voxelization_dim).x*(*voxelization_dim).y*(*voxelization_dim).z;
+  num_elements = (mesh_size_t)(*voxelization_dim).x*
+          (mesh_size_t)(*voxelization_dim).y*(mesh_size_t)(*voxelization_dim).z;
   // Start the additional required processing on top of a plain solid voxelization:
   ///////////
   /// STEP 3) Invert 0 to 1 and 1 to 0
@@ -486,7 +498,10 @@ unsigned char voxelizeGeometry_solid(float* vertices,
                                                     voxel_edge, triangles_BB,
                                                     triangles_Normal);
 
-  unsigned char* h_position_idx = new unsigned char[num_elements]; // this is wasted memory and memory assignment speed ; Sebastian was groggy enough that he could not make the code inside intersect_triangles_surface_Host() work properly without a h_position_idx and had to keep the function here - this should be easy to do.
+  unsigned char* h_position_idx = new unsigned char[num_elements]; // this is wasted
+  //  memory and memory assignment speed ; Sebastian could not make the code inside
+  //  intersect_triangles_surface_Host() work properly without a h_position_idx
+  // and had to keep the function here - this should be easy to do.
   unsigned char* h_material_idx = new unsigned char[num_elements];
   memset(h_material_idx, 0, num_elements);
 
@@ -499,7 +514,7 @@ unsigned char voxelizeGeometry_solid(float* vertices,
                                    h_position_idx,
                                    h_material_idx,
                                    number_of_triangles,
-                                   (*voxelization_dim).x*(*voxelization_dim).y,
+                                   (mesh_size_t)(*voxelization_dim).x*(*voxelization_dim).y,
                                    (*voxelization_dim).x,
                                    space_BB_vox,
                                    displace_mesh_voxels,
@@ -526,20 +541,20 @@ unsigned char voxelizeGeometry_solid(float* vertices,
   // a temporary matrix will be created with two additional Z slices at the bottom
   // and at the top to aid counting in the surrounding layer of air voxels (same trick
   // as in function voxelizeGeometry_surface_Host() )
-  buffer =  (*voxelization_dim).x*(*voxelization_dim).y;
+  buffer =  (mesh_size_t)(*voxelization_dim).x*(mesh_size_t)(*voxelization_dim).y;
   unsigned char * unique_materials_ids = &(unique_material_ids[0]);// easier to work with buffers
   unsigned char* d_pos_temp = (unsigned char*)NULL;
   unsigned char* d_mat_temp = (unsigned char*)NULL;
   d_pos_temp = valueToDevice<unsigned char>(num_elements + 2*buffer, 1, 0);
   d_mat_temp = valueToDevice<unsigned char>(num_elements + 2*buffer, 0, 0);
   // now put the data inside d_pos_temp from d_position_idx at +(int)buffer location:
-  cudasafe(cudaMemcpy(d_pos_temp + (int)buffer, *d_position_idx,  num_elements*sizeof(unsigned char), cudaMemcpyDeviceToDevice), "Memcopy");
-  cudasafe(cudaMemcpy(d_mat_temp + (int)buffer, *d_material_idx,  num_elements*sizeof(unsigned char), cudaMemcpyDeviceToDevice), "Memcopy");
+  cudasafe(cudaMemcpy(d_pos_temp + buffer, *d_position_idx,  num_elements*sizeof(unsigned char), cudaMemcpyDeviceToDevice), "Memcopy");
+  cudasafe(cudaMemcpy(d_mat_temp + buffer, *d_material_idx,  num_elements*sizeof(unsigned char), cudaMemcpyDeviceToDevice), "Memcopy");
   // reset d_material_idx (should not affect the simulation but the result of material is clearer!):
   cudasafe(cudaMemset(*d_material_idx, 0, num_elements), "Cuda MemSet");
 
-  unsigned int dim_xy = (*voxelization_dim).x*(*voxelization_dim).y;
-  unsigned int dim_x = (*voxelization_dim).x;
+  mesh_size_t dim_xy = (mesh_size_t)(*voxelization_dim).x*(mesh_size_t)(*voxelization_dim).y;
+  long long dim_x = (*voxelization_dim).x;
   double one_over_dim_xy = 1.0 / (double)dim_xy;
   double one_over_dim_x = 1.0 / (double)(*voxelization_dim).x;
   // Build a HASH: maps material_id to its index: (vox::HashMap needs a .fromHosttoDevice() method) first get the maximum:
@@ -556,20 +571,18 @@ unsigned char voxelizeGeometry_solid(float* vertices,
   d_error = valueToDevice<unsigned char>(1, 0, 0);
   c_log_msg(LOG_DEBUG, "voxelizationUtils.cu: Count_Air_Neighboring_Nodes - "
       "Max_material_ID = %u, dim_xy = %u, dim_x = %u", max_, dim_xy, dim_x);
-  Count_Air_Neighboring_Nodes_Kernel<<<grid_dim, block_dim>>>(
-                                                      d_pos_temp + (int)buffer,
-                                                      *d_position_idx,
-                                                      d_mat_temp + (int)buffer,
-                                                      max_,
-                                                      *d_material_idx,
-                                                      num_elements,
-                                                      dim_xy,
-                                                      dim_x,
-                                                      one_over_dim_xy,
-                                                      one_over_dim_x,
-                                                      bit_mask,
-                                                      d_error);
-
+  Count_Air_Neighboring_Nodes_Kernel<<<grid_dim, block_dim>>>(d_pos_temp + (mesh_size_t)buffer,
+                                                              *d_position_idx,
+                                                              d_mat_temp + (mesh_size_t)buffer,
+                                                              max_,
+                                                              *d_material_idx,
+                                                              num_elements,
+                                                              dim_xy,
+                                                              dim_x,
+                                                              one_over_dim_xy,
+                                                              one_over_dim_x,
+                                                              bit_mask,
+                                                              d_error);
   cudasafe(cudaPeekAtLastError(), "voxelizationUtils.cu: Solid count air nodes () - peek before return");
   cudasafe(cudaDeviceSynchronize(), "voxelizationUtils.cu: voxelizeGeometry_solid()  - cudaDeviceSynchronize after air counts");
   // Check errors:
@@ -612,7 +625,8 @@ unsigned char voxelizeGeometry_surface_6_separating(
                                         uint3* voxelization_dim,
                                         long partial_vox_Z_start,
                                         long partial_vox_Z_end,
-                                        unsigned char dev_idx) {
+                                        unsigned char dev_idx)
+{
   unsigned char bit_mask = 0x80;
   unsigned int displace_mesh_voxels = 1;// Add a layer of air cells around
   enum Surface_Voxelization_Type voxType = VOX_6_SEPARATING;
@@ -649,7 +663,8 @@ unsigned char voxelizeGeometry_surface_conservative(float* vertices,
                                                     uint3* voxelization_dim,
                                                     long partial_vox_Z_start,
                                                     long partial_vox_Z_end,
-                                                    unsigned char dev_idx) {
+                                                    unsigned char dev_idx)
+{
   unsigned char bit_mask = 0x80;
   unsigned int displace_mesh_voxels = 1;// Add a layer of air cells around
   enum Surface_Voxelization_Type voxType = VOX_CONSERVATIVE;
@@ -678,7 +693,8 @@ uint3 get_Geometry_surface_Voxelization_dims(float* vertices,
                                              unsigned int* indices,
                                              unsigned int number_of_triangles,
                                              unsigned int number_of_vertices,
-                                             double voxel_edge) {
+                                             double voxel_edge)
+{
   uint3 voxelization_dim;
   // Config, as in voxelizeGeometry_surface_XXX() functions;
   unsigned int displace_mesh_voxels = 1;// Add a layer of air cells around
@@ -878,7 +894,8 @@ unsigned char voxelizeGeometry_surface_Host(float* vertices,
      "Overflow of number of nodes! Kernels designed to support up to %u nodes", UINT_MAX);
     throw 3;
   }
-  unsigned int num_elements = (*voxelization_dim).x*(*voxelization_dim).y*(*voxelization_dim).z;
+  mesh_size_t num_elements = (mesh_size_t)(*voxelization_dim).x*
+          (mesh_size_t)(*voxelization_dim).y*(mesh_size_t)(*voxelization_dim).z;
 
   ////////////////////////////////////////////////////////// Host voxelization:
   // For CUDA voxelization, launch CUDA_launch_6_separating_surface_voxelization()
@@ -892,28 +909,31 @@ unsigned char voxelizeGeometry_surface_Host(float* vertices,
   //   intersect_triangles_6_separating_Host() and later ( +(int)dim.x*dim.y )
   //   when calling Count_Air_Neighboring_Nodes_Kernel() from to_ParallelFDTD_
   //   surface_voxelization().
-  unsigned int buffer =  (*voxelization_dim).x*(*voxelization_dim).y;
+  mesh_size_t buffer =  (mesh_size_t)(*voxelization_dim).x*(mesh_size_t)(*voxelization_dim).y;
   unsigned char* h_position_idx = new unsigned char[num_elements + 2*buffer];
   // Set to 1 (boundary has a 0):
   memset(h_position_idx, 1, num_elements + 2*buffer);
   unsigned char* h_material_idx = new unsigned char[num_elements + 2*buffer];
   memset(h_material_idx, 0, num_elements + 2*buffer);// Mat 0 is for air!
   intersect_triangles_surface_Host(
-                voxel_edge,
-                vertices_local,
-                indices,
-                materials,
-                triangles_BB,
-                triangles_Normal,
-                h_position_idx + (int)buffer,
-                h_material_idx + (int)buffer,
-                number_of_triangles,
-                (*voxelization_dim).x*(*voxelization_dim).y,
-                (*voxelization_dim).x,
-                space_BB_vox,
-                displace_mesh_voxels,
-                voxType);
-
+                                voxel_edge,
+                                vertices_local,
+                                indices,
+                                materials,
+                                triangles_BB,
+                                triangles_Normal,
+                                h_position_idx + (mesh_size_t)buffer,
+                                h_material_idx + (mesh_size_t)buffer,
+                                number_of_triangles,
+                                (mesh_size_t)(*voxelization_dim).x*(mesh_size_t)(*voxelization_dim).y,
+                                (*voxelization_dim).x,
+                                space_BB_vox,
+                                displace_mesh_voxels,
+                                voxType
+                                );
+  c_log_msg(LOG_DEBUG, "voxelizationUtils.cu: Host surface voxelization - "
+      " voxelized on host. %.2f GB values to device %d.",
+            (double(num_elements*2 + 4*buffer) / (double)1E9) , dev_idx);
   // Copy them to device:
   (*d_position_idx) = toDevice(num_elements + 2*buffer, h_position_idx , dev_idx);
   (*d_material_idx) = toDevice(num_elements + 2*buffer, h_material_idx , dev_idx);
@@ -969,7 +989,7 @@ unsigned char voxelizeGeometry_surface_Host(float* vertices,
             "surface - remove last slice!");
   }
   if (do_partial_vox){
-  unsigned int mem_size = (num_elements - start_idx - last_idx)*sizeof(unsigned char);
+  mesh_size_t mem_size = (num_elements - start_idx - last_idx)*sizeof(unsigned char);
   unsigned char* d_pos_final = (unsigned char*)NULL;
   unsigned char* d_mat_final = (unsigned char*)NULL;
   cudasafe(cudaSetDevice(dev_idx), "voxelizationUtils.cu Partial voxelization"
@@ -1014,13 +1034,13 @@ unsigned char voxelizeGeometrySurfToHost(float* vertices,
                                          uint3 voxelize_for_block_size,
                                          long partial_vox_Z_start,
                                          long partial_vox_Z_end){
-  c_log_msg(LOG_INFO, "voxelizationUtils: voxelizeGeometry_surface_Host - "
+  c_log_msg(LOG_INFO, "voxelizationUtils: voxelizeGeometrySurfToHost - "
                       "voxelizeGeometryToDevice [%s] - begin",
                       (voxType == 0 ? "CONSERVATIVE" : "6-SEPARATING" ) );
 
   if (num_triangles <1) {
    c_log_msg(LOG_INFO,
-           "voxelizationUtils: voxelizeGeometry_surface_Host - No triangles"
+           "voxelizationUtils: voxelizeGeometrySurfToHost - No triangles"
            " to voxelize. Returning.");
    return 0;
   }
@@ -1040,7 +1060,7 @@ unsigned char voxelizeGeometrySurfToHost(float* vertices,
   // Some prerequisites:
   if (unique_material_ids.at(0) == 0) {
    c_log_msg(LOG_ERROR,
-   "voxelizationUtils: voxelizeGeometry_surface_Host - Please don't use"
+   "voxelizationUtils: voxelizeGeometrySurfToHost - Please don't use"
    " material index 0! Reserved for air.");
    throw 10;
   }
@@ -1050,7 +1070,7 @@ unsigned char voxelizeGeometrySurfToHost(float* vertices,
   num_unique_materials += 1;
 
   c_log_msg(LOG_DEBUG,
-  "voxelizationUtils: voxelizeGeometry_surface_Host - voxelizeGeometryToDevice"
+  "voxelizationUtils: voxelizeGeometrySurfToHost - voxelizeGeometryToDevice"
   " - Retrieved unique material ids. num_unique_materials = %d; "
   " size of unique_material_ids = %d", num_unique_materials,
   unique_material_ids.size());
@@ -1069,10 +1089,10 @@ unsigned char voxelizeGeometrySurfToHost(float* vertices,
                                                     voxel_edge, triangles_BB,
                                                     triangles_Normal);
 
-  c_log_msg(LOG_DEBUG, "voxelizationUtils: voxelizeGeometry_surface_"
-        "Host - World BoundingBox: min [%d,%d,%d], max [%d,%d,%d].",
-       space_BB_vox.min.x,space_BB_vox.min.y,space_BB_vox.min.z,
-       space_BB_vox.max.x,space_BB_vox.max.y,space_BB_vox.max.z);
+  c_log_msg(LOG_DEBUG, "voxelizationUtils: voxelizeGeometrySurfToHost"
+        " - World BoundingBox: min [%d,%d,%d], max [%d,%d,%d].",
+        space_BB_vox.min.x,space_BB_vox.min.y,space_BB_vox.min.z,
+        space_BB_vox.max.x,space_BB_vox.max.y,space_BB_vox.max.z);
 
   /// Partial voxelization:
   bool do_partial_vox = false;
@@ -1083,7 +1103,7 @@ unsigned char voxelizeGeometrySurfToHost(float* vertices,
    do_partial_vox = true;
    // Sanity check:
    if (partial_vox_Z_start > partial_vox_Z_end){
-     c_log_msg(LOG_ERROR, "voxelizeGeometry_surface_Host : partial_vox_Z_start"
+     c_log_msg(LOG_ERROR, "voxelizeGeometrySurfToHost : partial_vox_Z_start"
          " is > partial_vox_Z_end!");
      throw 10;
    }
@@ -1091,8 +1111,8 @@ unsigned char voxelizeGeometrySurfToHost(float* vertices,
      remove_first_air_slice = true;
      // Sanity check:
      if (partial_vox_Z_start > space_BB_vox.max.z)
-       c_log_msg(LOG_WARNING, "voxelizationUtils: voxelizeGeometry_surface_"
-       "Host - given starting Z slice (%d) is bigger than domain(%d)! "
+       c_log_msg(LOG_WARNING, "voxelizationUtils: voxelizeGeometrySurfToHost"
+       " - given starting Z slice (%d) is bigger than domain(%d)! "
        "Using %d",partial_vox_Z_start,space_BB_vox.max.z,space_BB_vox.max.z);
      space_BB_vox.min.z = min(max((int)(partial_vox_Z_start - displace_mesh_voxels),0),space_BB_vox.max.z);
      if (space_BB_vox.min.z == 0)
@@ -1102,8 +1122,8 @@ unsigned char voxelizeGeometrySurfToHost(float* vertices,
      remove_last_air_slice = true;
      // Sanity check:
      if (partial_vox_Z_end - displace_mesh_voxels > space_BB_vox.max.z){
-       c_log_msg(LOG_WARNING, "voxelizationUtils: voxelizeGeometry_surface_"
-       "Host - given ending Z slice (%d) is bigger than domain(%d)! "
+       c_log_msg(LOG_WARNING, "voxelizationUtils: voxelizeGeometrySurfToHost"
+       " - given ending Z slice (%d) is bigger than domain(%d)! "
        "Using %d",partial_vox_Z_end,space_BB_vox.max.z,space_BB_vox.max.z);
        remove_last_air_slice = false; // We want until end, so no point in removing it
      }
@@ -1112,9 +1132,9 @@ unsigned char voxelizeGeometrySurfToHost(float* vertices,
 
    }
    c_log_msg(LOG_INFO,
-           "voxelizationUtils: voxelizeGeometry_surface_Host - Doing a "
+           "voxelizationUtils: voxelizeGeometrySurfToHost - Doing a "
            "partial voxelization between Z slices: %d - %d.",
-       space_BB_vox.min.z, space_BB_vox.max.z);
+        space_BB_vox.min.z, space_BB_vox.max.z);
   }
   /////////////////////////////////////////////////////////////////////////////
   end_t = clock() - start_t;
@@ -1141,7 +1161,7 @@ unsigned char voxelizeGeometrySurfToHost(float* vertices,
   (*voxelization_dim).y = minimal_voxelization_dim.y + pad_voxelization_dim.y;
   (*voxelization_dim).z = minimal_voxelization_dim.z + pad_voxelization_dim.z;
   c_log_msg(LOG_DEBUG,
-  "voxelizationUtils: voxelizeGeometry_surface -  Processed triangles (time: "
+  "voxelizationUtils: voxelizeGeometrySurfToHost -  Processed triangles (time: "
   "%f seconds). Voxelization dimensions: [%d,%d,%d]. Padded by: [%d,%d,%d]",
   (float)end_t/CLOCKS_PER_SEC, (*voxelization_dim).x, (*voxelization_dim).y,
   (*voxelization_dim).z, pad_voxelization_dim.x, pad_voxelization_dim.y,
@@ -1173,7 +1193,7 @@ unsigned char voxelizeGeometrySurfToHost(float* vertices,
   //   intersect_triangles_6_separating_Host() and later ( +(int)dim.x*dim.y )
   //   when calling Count_Air_Neighboring_Nodes_Kernel() from to_ParallelFDTD_
   //   surface_voxelization().
-  unsigned int buffer =  dim_xy;
+  mesh_size_t buffer =  dim_xy;
   *h_position_idx = (unsigned char*)calloc(num_elements+2*buffer,
                                            sizeof(unsigned char));
 
@@ -1202,14 +1222,14 @@ unsigned char voxelizeGeometrySurfToHost(float* vertices,
                                    voxType);
 
   end_t = clock()-start_t;
-  c_log_msg(LOG_DEBUG, "voxelizationUtils.cu: Host surface voxelization time:"
-     " %f seconds", (float)end_t/CLOCKS_PER_SEC);
+  c_log_msg(LOG_DEBUG, "voxelizationUtils.cu: voxelizeGeometrySurfToHost - "
+     " Host surface voxelization time: %f seconds", (float)end_t/CLOCKS_PER_SEC);
   // Free host data:
   delete[] vertices_local;
   delete[] triangles_BB;
   delete[] triangles_Normal;
 
-  unsigned int start_idx = 0, last_idx = 0;
+  mesh_size_t start_idx = 0, last_idx = 0;
   if (do_partial_vox && remove_first_air_slice){// First slice:
     start_idx = buffer;
     (*voxelization_dim).z -= 1;
@@ -1223,7 +1243,7 @@ unsigned char voxelizeGeometrySurfToHost(float* vertices,
             "surface - remove last slice!");
   }
   if (do_partial_vox){
-    unsigned int mem_size = (num_elements - start_idx - last_idx)*sizeof(unsigned char);
+    mesh_size_t mem_size = (num_elements - start_idx - last_idx)*sizeof(unsigned char);
     memcpy(*h_position_idx, *h_position_idx+start_idx, mem_size);
     memcpy(*h_material_idx, *h_material_idx+start_idx, mem_size);
     realloc(*h_position_idx, mem_size);
@@ -1418,9 +1438,9 @@ __global__ void Count_Air_Neighboring_Nodes_Kernel(
                                     const unsigned char* __restrict d_Mat_voxelizer_in,
                                     const unsigned char max_mat_id,
                                     unsigned char* d_Mat_out,
-                                    const unsigned int num_elems,
-                                    const unsigned int dim_xy,
-                                    const unsigned int dim_x,
+                                    const long long num_elems,
+                                    const long long dim_xy,
+                                    const long long dim_x,
                                     const double one_over_dim_xy,
                                     const double one_over_dim_x,
                                     const unsigned char bit_mask,
@@ -1530,7 +1550,7 @@ void intersect_triangles_surface_Host(const double dX,
                                       unsigned char*  h_Bid_out,
                                       unsigned char* h_Mat_out,
                                       const unsigned int num_triangles,
-                                      const int dim_xy,
+                                      const mesh_size_t dim_xy,
                                       const int dim_x,
                                       vox::Bounds<uint3> space_BB_vox,
                                       unsigned int displace_mesh_voxels,
@@ -1725,7 +1745,8 @@ void CUDA_launch_6_separating_surface_voxelization(
     clock_t start_t;
     clock_t end_t;
     // Allocate am additional buffer for indexing out of bounds
-    unsigned int buffer =  (*h_voxelization_dim).x*(*h_voxelization_dim).y+(*h_voxelization_dim).x+1;
+    mesh_size_t buffer =  (mesh_size_t)(*h_voxelization_dim).x*
+            (mesh_size_t)(*h_voxelization_dim).y+(mesh_size_t)(*h_voxelization_dim).x+1;
     (*d_position_idx) = valueToDevice<unsigned char>(num_elements+buffer, (unsigned char)1, 0);
     (*d_material_idx) = valueToDevice<unsigned char>(num_elements+buffer, (unsigned char)0, 0);
 
@@ -1951,10 +1972,10 @@ void calcBoundaryValuesInplace(unsigned char* h_position_idx,
                                unsigned long long dim_x,
                                unsigned long long dim_y,
                                unsigned long long dim_z) {
-  mesh_size_t dim_xy = dim_x*dim_y;
+  mesh_size_t dim_xy = (mesh_size_t)dim_x*dim_y;
   mesh_size_t num_elements = dim_xy*dim_z;
 
-  for(unsigned int i = 0; i < num_elements; i++) {
+  for(mesh_size_t i = 0; i < num_elements; i++) {
     if(h_position_idx[i] == 0)
       continue;
 
@@ -1978,11 +1999,11 @@ void calcMaterialIndicesInplace(unsigned char* h_material_idx,
                                 unsigned long long dim_x,
                                 unsigned long long dim_y,
                                 unsigned long long dim_z) {
-  mesh_size_t dim_xy = dim_x*dim_y;
+  mesh_size_t dim_xy = (mesh_size_t)dim_x*dim_y;
   mesh_size_t num_elements = dim_xy*dim_z;
   unsigned char* h_mat = h_material_idx; // Abreviation
 
-  for(unsigned int i = dim_xy; i < num_elements-dim_xy; i++) {
+  for(mesh_size_t i = dim_xy; i < num_elements-dim_xy; i++) {
     if(h_position_idx[i] == 0)
       continue;
 
@@ -1999,7 +2020,7 @@ void calcMaterialIndicesInplace(unsigned char* h_material_idx,
     }
   }
 
-  for(unsigned int i = dim_xy; i < num_elements-dim_xy; i++) {
+  for(mesh_size_t i = dim_xy; i < num_elements-dim_xy; i++) {
     h_mat[i] = h_mat[i]>>4;
   }
 }

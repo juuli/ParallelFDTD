@@ -49,6 +49,7 @@
 #include "cudaUtils.h"
 #include "../Voxelizer/include/common.h"
 #include "../Voxelizer/include/voxelizer.h"
+#include "cudaMesh.h"
 
 class Node;
 
@@ -367,9 +368,9 @@ __global__ void Count_Air_Neighboring_Nodes_Kernel(
                                     const unsigned char* __restrict d_Mat_voxelizer_in,
                                     const unsigned char max_mat_id,
                                     unsigned char* d_Mat_out,
-                                    const unsigned int num_elems,
-                                    const unsigned int dim_xy,
-                                    const unsigned int dim_x,
+                                    const long long num_elems,
+                                    const long long dim_xy,
+                                    const long long dim_x,
                                     const double one_over_dim_xy,
                                     const double one_over_dim_x,
                                     const unsigned char bit_mask,
@@ -744,7 +745,7 @@ void intersect_triangles_surface_Host(
                   unsigned char*  h_Bid_out,
                   unsigned char* h_Mat_out,
                   const unsigned int num_triangles,
-                  const int dim_xy,
+                  const mesh_size_t dim_xy,
                   const int dim_x,
                   vox::Bounds<uint3> space_BB_vox,
                   unsigned int displace_mesh_voxels,

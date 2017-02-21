@@ -227,7 +227,6 @@ float launchFDTD3dDouble(CudaMesh* d_mesh,
 
   std::vector< std::pair <double*, std::pair<mesh_size_t, int> > > d_receiver_data;
   for(unsigned int i = 0; i < sp->getNumReceivers(); i++) {
-    c_log_msg(LOG_INFO, "kernel3d.cu: launchFDTD3dDouble - allocating receiver %u", i);
     nv::Vec3i pos = sp->getReceiverElementCoordinates(i);
     mesh_size_t element_idx;
     int device_idx;
@@ -239,7 +238,6 @@ float launchFDTD3dDouble(CudaMesh* d_mesh,
     std::pair<double*, std::pair<mesh_size_t,int> > temp_d(d_return_ptr, temp_i);
     d_receiver_data.push_back(temp_d);
   }
-  c_log_msg(LOG_INFO, "kernel3d.cu: launchFDTD3dDouble - after recevier allocation");
 
   unsigned int step;
   cudaDeviceSetCacheConfig(cudaFuncCachePreferL1);
