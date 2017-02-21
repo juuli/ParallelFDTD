@@ -168,7 +168,7 @@ param partition_indexing [IN]: Partitioning of domain in Z direction (comes
 void MPI_extract_idx_data(uint3* voxelization_dim, int MPI_rank,
   unsigned char*& device_boundary_idx,
   unsigned char*& device_material_idx,
-  const std::vector< std::vector< unsigned int> > &MPI_partition_indexing);
+  const std::vector< std::vector< mesh_size_t> > &MPI_partition_indexing);
 
 /*/////////////////////////////////////////////////////////////////////////////
 Function extracts some useful and simple data on the current MPI domain.
@@ -206,10 +206,10 @@ void MPI_domain_get_useful_data(
 /param MPI_rank [IN]: The current MPI rank of MPI domain.
 /returns: true if receiver is inside MPI domain. false otherwise.
  */
-bool MPI_check_receiver(int* z_index,
+bool MPI_check_receiver(mesh_size_t* z_index,
   const std::vector< std::vector< mesh_size_t > > &MPI_partition_indexing,
-  unsigned int MPI_partition_Z_start_idx,
-  unsigned int MPI_partition_Z_end_idx, int MPI_rank);
+  mesh_size_t MPI_partition_Z_start_idx,
+  mesh_size_t MPI_partition_Z_end_idx, int MPI_rank);
 
 /*/////////////////////////////////////////////////////////////////////////////
  Function checks whether source is in the current MPI domain. This is done
@@ -221,7 +221,7 @@ bool MPI_check_receiver(int* z_index,
 /param MPI_rank [IN]: The current MPI rank of MPI domain.
 /returns: true if source is inside MPI domain. false otherwise.
 */
-bool MPI_check_source(int* z_index,
+bool MPI_check_source(mesh_size_t* z_index,
   const std::vector< std::vector< mesh_size_t > > &MPI_partition_indexing,
   int MPI_rank);
 
@@ -256,7 +256,7 @@ void MPI_checks(CudaMesh* d_mesh, int MPI_rank,
 /param Z_slice_index [IN]: The slice that has to be printed
 */
 template <typename T>
-std::string debugging_SHA256_slice_device(T* d_pointer, unsigned int dimXY,
+std::string debugging_SHA256_slice_device(T* d_pointer, mesh_size_t dimXY,
       unsigned int Z_slice_index, unsigned int dev_idx) {
   // First, get slice on host:
   T *host_slice = new T[dimXY];
@@ -285,7 +285,7 @@ std::string debugging_SHA256_slice_device(T* d_pointer, unsigned int dimXY,
 /param Z_slice_index [IN]: The slice that has to be printed
 */
 template <typename T>
-std::string debugging_SHA256_slice_host(T* h_pointer, unsigned int dimXY,
+std::string debugging_SHA256_slice_host(T* h_pointer, mesh_size_t dimXY,
     unsigned int Z_slice_index) {
   T *host_slice = h_pointer + Z_slice_index * dimXY;
   // Get SHA256 hash:
@@ -299,7 +299,7 @@ Function logs the partition indexing for debugging purposes.
 /param msg_[IN]: Some extra message in the logger print.
 */
 void debugging_print_partion_indexing(
-    std::vector< unsigned int> partition_indexing_, const char* msg_ = "");
+    std::vector<mesh_size_t> partition_indexing_, const char* msg_ = "");
 
 /*/////////////////////////////////////////////////////////////////////////////
  Function used to log the first two and last two slices of current pressure for
@@ -334,10 +334,10 @@ void debugging_log_pressure_slices_hash_single(
 * allocated on the host!
 */
 float MPI_switch_Halos_single_host(CudaMesh* d_mesh, unsigned int step,
-	float* h_buffer_blockingSR,
-	int MPI_rank,
-	int MPI_rank_neigbor_down,
-	int MPI_rank_neigbor_up);
+  float* h_buffer_blockingSR,
+  int MPI_rank,
+  int MPI_rank_neigbor_down,
+  int MPI_rank_neigbor_up);
 
 /*/////////////////////////////////////////////////////////////////////////////
 * Function switches halos between MPI domains - done for a non-CUDA-aware
@@ -352,10 +352,10 @@ float MPI_switch_Halos_single_host(CudaMesh* d_mesh, unsigned int step,
 * allocated on the host!
 */
 float MPI_switch_Halos_double_host(CudaMesh* d_mesh, unsigned int step,
-	double* h_buffer_blockingSR,
-	int MPI_rank,
-	int MPI_rank_neigbor_down,
-	int MPI_rank_neigbor_up);
+  double* h_buffer_blockingSR,
+  int MPI_rank,
+  int MPI_rank_neigbor_down,
+  int MPI_rank_neigbor_up);
 
 ///////////////////////////////////////////////////////////////////////////////
 /*

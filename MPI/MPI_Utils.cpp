@@ -40,7 +40,7 @@ float MPI_switch_Halos_single(CudaMesh* d_mesh, unsigned int step,
   // MPI message tagging:
   const int MPI_HALOTAG = 1;
   /// Prerequisite variables:
-  int MPI_halo_size = d_mesh->getDimXY();
+  mesh_size_t MPI_halo_size = d_mesh->getDimXY();
   int first_device_SubDomain_idx = 0,
       last_device_SubDomain_idx = d_mesh->getNumberOfPartitions() - 1;
   int size_lastSubDomain =
@@ -151,7 +151,7 @@ float MPI_switch_Halos_double(CudaMesh* d_mesh, unsigned int step,
   // MPI message tagging:
   const int MPI_HALOTAG = 1;
   /// Prerequisite variables:
-  int MPI_halo_size = d_mesh->getDimXY();
+  mesh_size_t MPI_halo_size = d_mesh->getDimXY();
   int first_device_SubDomain_idx = 0,
       last_device_SubDomain_idx = d_mesh->getNumberOfPartitions() - 1;
   int size_lastSubDomain =
@@ -251,13 +251,13 @@ void MPI_extract_idx_data(uint3* voxelization_dim, int MPI_rank,
   unsigned char*& device_boundary_idx,
   unsigned char*& device_material_idx,
   const std::vector< std::vector< mesh_size_t > > &MPI_partition_indexing) {
-  unsigned int dimXY = (int)(*voxelization_dim).x*(int)(*voxelization_dim).y;
+  mesh_size_t dimXY = (*voxelization_dim).x*(*voxelization_dim).y;
   // Extract boundary matrix for this process: get the partin indices first:
   std::vector<mesh_size_t> curent_slice_indices =
       MPI_partition_indexing.at(MPI_rank);
   // The boundary matrix is on GPU ( d_postition_idx_ )
-  int MPI_offset = dimXY * curent_slice_indices.at(0);
-  int MPI_mem_size = dimXY * curent_slice_indices.size();
+  mesh_size_t MPI_offset = dimXY * curent_slice_indices.at(0);
+  mesh_size_t MPI_mem_size = dimXY * curent_slice_indices.size();
   // Move data to CPU to save memory on the GPU:
   unsigned char* h_idx_MPI_chunk = new unsigned char[MPI_mem_size];
   copyDeviceToHost(MPI_mem_size, h_idx_MPI_chunk, device_boundary_idx+
@@ -267,7 +267,7 @@ void MPI_extract_idx_data(uint3* voxelization_dim, int MPI_rank,
   "%d to %d equivalent to %d memsize (dimXY = %d). "
       "Total size of idx_matrix is %d") %MPI_rank %MPI_offset
     %(MPI_offset+MPI_mem_size) %MPI_mem_size %dimXY
-  %((int)(*voxelization_dim).x*(int)(*voxelization_dim).y*(int)(*voxelization_dim).z);
+  %((*voxelization_dim).x*(*voxelization_dim).y*(*voxelization_dim).z);
   // Now destroy old data on the GPU to make room:
   destroyMem(device_boundary_idx);
   // Put it back:
@@ -338,10 +338,10 @@ void MPI_domain_get_useful_data(
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-bool MPI_check_receiver(int* z_index,
+bool MPI_check_receiver(mesh_size_t* z_index,
   const std::vector< std::vector< mesh_size_t> > &MPI_partition_indexing,
-  unsigned int MPI_partition_Z_start_idx,
-  unsigned int MPI_partition_Z_end_idx, int MPI_rank) {
+  mesh_size_t MPI_partition_Z_start_idx,
+  mesh_size_t MPI_partition_Z_end_idx, int MPI_rank) {
   if ( ((*z_index) >= MPI_partition_Z_start_idx) &&
       ((*z_index) <= MPI_partition_Z_end_idx) )
   {
@@ -353,7 +353,7 @@ bool MPI_check_receiver(int* z_index,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-bool MPI_check_source(int* z_index,
+bool MPI_check_source(mesh_size_t* z_index,
   const std::vector< std::vector< mesh_size_t> > &MPI_partition_indexing,
   int MPI_rank)
 {
@@ -371,7 +371,7 @@ bool MPI_check_source(int* z_index,
 void MPI_checks(CudaMesh* d_mesh, int MPI_rank,
   const std::vector< std::vector< mesh_size_t> > &MPI_partition_indexing) {
   //Check size (just raise warning now-might work for larger message sizes):
-  int MPI_halo_size_MB = d_mesh->getDimXY() *
+    mesh_size_t MPI_halo_size_MB = d_mesh->getDimXY() *
       (d_mesh->isDouble() ? sizeof(double) : sizeof(float)) * 1e-6;
   if (MPI_halo_size_MB >= 2000){
     log_msg<LOG_WARNING>(L"FDTD_MPI - !! Halo size is greater than 2 GB"
@@ -483,7 +483,7 @@ float MPI_switch_Halos_single_host(CudaMesh* d_mesh, unsigned int step,
 	// MPI message tagging:
 	const int MPI_HALOTAG = 1;
 	/// Prerequisite variables:
-	int MPI_halo_size = d_mesh->getDimXY();
+	mesh_size_t MPI_halo_size = d_mesh->getDimXY();
 	int first_device_SubDomain_idx = 0,
 		last_device_SubDomain_idx = d_mesh->getNumberOfPartitions() - 1;
 	int size_lastSubDomain =
@@ -618,7 +618,7 @@ float MPI_switch_Halos_double_host(CudaMesh* d_mesh, unsigned int step,
 	// MPI message tagging:
 	const int MPI_HALOTAG = 1;
 	/// Prerequisite variables:
-	int MPI_halo_size = d_mesh->getDimXY();
+	mesh_size_t MPI_halo_size = d_mesh->getDimXY();
 	int first_device_SubDomain_idx = 0,
 		last_device_SubDomain_idx = d_mesh->getNumberOfPartitions() - 1;
 	int size_lastSubDomain =
