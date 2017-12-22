@@ -30,6 +30,13 @@
 static volatile bool interrupt = false;
 
 int main(int argc, char** argv){
+  if(argc<3) {
+    printf("Invalid number of arguments %d, should be 3\n", argc);
+    printf("testExec.exe <geometry .vtk> <fs>\n", argc);
+    return 0;
+  }
+  printf("Begin main\n");
+  std::cout << "In the beginning" << std::endl;
   loggerInit();
   log_msg<LOG_INFO>(L"Main: begin");
   FDTD::App app;
@@ -37,9 +44,9 @@ int main(int argc, char** argv){
   // The app will throw -1 on error
   try {
     app.initializeDevices();
-    app.initializeGeometryFromFile("./data/box_1175.vtk");
+    app.initializeGeometryFromFile(argv[1]);
     app.m_materials.setGlobalMaterial(app.m_geometry.getNumberOfTriangles(), reflection2Admitance(0.9f));
-    app.m_parameters.setSpatialFs(21000);
+    app.m_parameters.setSpatialFs(atoi(argv[2]));
     app.m_parameters.setNumSteps(300);
     app.m_parameters.setUpdateType(SRL_FORWARD);
     app.m_parameters.setVoxelizationType(SURFACE_6);
@@ -54,7 +61,6 @@ int main(int argc, char** argv){
       std::cout<<"Receiver at "<<i<<" x: "<<rec.x<<" y: "<<rec.y<<" z: "<<rec.z<<std::endl;
     }
 
-
     #ifdef COMPILE_VISUALIZATION
       app.runVisualization();
     #else
@@ -62,9 +68,8 @@ int main(int argc, char** argv){
     #endif
   }
   catch(...) {
-
+    std::cout << "Error caught" << std::endl;
   }
   app.close();
-
   return 0;
 }
