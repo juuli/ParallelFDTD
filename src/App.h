@@ -80,7 +80,11 @@ public:
     step_direction_(1),
     capture_id_("")
   {loggerInit();
-   this->setupDefaultCallbacks();};
+   this->setupDefaultCallbacks();
+   #ifdef COMPILE_VISUALIZATION
+    this->m_window = NULL;
+   #endif
+ };
 
 
   /// Default destructor
