@@ -41,7 +41,7 @@ int gpuGetMaxFreeMemoryDeviceId();
 /// \param major The major revision number of the Cuda device
 /// \param minor The minor revision number of the Cuda device
 /// \return The number of cores in the device
-int _ConvertSMVer2Cores(int major, int minor); 
+int _ConvertSMVer2Cores(int major, int minor);
 
 /// \brief Cuda error handling function
 /// \param error The cuda error returned by a cuda function
@@ -69,29 +69,26 @@ T* toDevice(unsigned int mem_size, unsigned int device)
   T* P;
   cudasafe(cudaMalloc((void**)&P, mem_size*sizeof(T)), "T to device: Malloc");
   cudasafe(cudaMemcpy((void*)P, h_P,  mem_size*sizeof(T), cudaMemcpyHostToDevice), "Memcopy");
-  
+
   //printCheckSum(P, mem_size, "floats initialize to 0: ");
-  
+
   free(h_P);
   return P;
 };
 
 template < typename T >
-T* toDevice(unsigned int mem_size, const T* h_data, unsigned int device)
-{
-  c_log_msg(LOG_DEBUG, "cudaUtils.cu: T ToDevice(data) - mem_size %u, device %d", mem_size, device);
+T* toDevice(unsigned int mem_size, const T* h_data, unsigned int device) {
   cudasafe(cudaSetDevice(device), "T ToDevice: cudaSetDevice");
   T* d_data;
   cudasafe(cudaMalloc((void**)&d_data, mem_size*sizeof(T)), "T to device: Malloc");
   cudasafe(cudaMemcpy((void*)d_data, h_data,  mem_size*sizeof(T), cudaMemcpyHostToDevice), "Memcopy");
-  
+
   return d_data;
 };
 
 // This is defined to avoid mixup with the overloading
 template < typename T >
-T* valueToDevice(unsigned int mem_size, T val, unsigned int device)
-{
+T* valueToDevice(unsigned int mem_size, T val, unsigned int device) {
   T* h_P = (T*)calloc(mem_size, sizeof(T));
   c_log_msg(LOG_DEBUG, "cudaUtils.cu: t ToDevice - mem_size %u, init val: %d, device %d", mem_size, val, device);
 
@@ -102,7 +99,7 @@ T* valueToDevice(unsigned int mem_size, T val, unsigned int device)
   T* P;
   cudasafe(cudaMalloc((void**) &P, mem_size*sizeof(T)), "unsigned char to device: Malloc");
   cudasafe(cudaMemcpy(P, h_P,  mem_size*sizeof(T), cudaMemcpyHostToDevice), "Memcopy");
-  
+
   free(h_P);
   return P;
 };
@@ -115,7 +112,7 @@ T* fromDevice(unsigned int mem_size, const T* d_data, unsigned int device)
   c_log_msg(LOG_DEBUG, "cudaUtils.cu: T fromDevice(data) - mem_size %u, device %d", mem_size, device);
   cudasafe(cudaSetDevice(device), "T fromDevice: cudaSetDevice");
   cudasafe(cudaMemcpy(h_data, d_data,  mem_size*sizeof(T), cudaMemcpyDeviceToHost), "T fromDevice: Memcopy");
-   
+
   return h_data;
 };
 
@@ -173,7 +170,7 @@ void destroyMem(T* d_data, unsigned int device) {
 };
 
 template <typename T>
-__global__ void resetKernel(T* d_data, unsigned int mem_size); 
+__global__ void resetKernel(T* d_data, unsigned int mem_size);
 
 
 #endif
