@@ -5,8 +5,7 @@ cuda_add_executable( testExec main.cpp ${SOURCES_CPP} ${SOURCES_CU} )
 
 target_link_libraries(testExec ${GLUT_LIBRARIES} ${OPENGL_LIBRARIES} ${GLEW_LIBRARIES}
                                ${VOXELIZER_LIB}
-                               ${Boost_THREAD_LIBRARY} ${Boost_SYSTEM_LIBRARY}
-                               ${Boost_DATE_TIME_LIBRARY} ${unix_specific_libraries})
+                               ${Boost_LIBRARIES} ${unix_specific_libraries})
 
 if(BUILD_PYTHON)
   cuda_add_library( libPyFDTD SHARED ${SOURCES_CPP} ${SOURCES_CU} ${CMAKE_SOURCE_DIR}/src/AppPy.cpp)
@@ -26,8 +25,8 @@ target_link_libraries( libPyFDTD ${GLUT_LIBRARIES} ${OPENGL_LIBRARIES} ${GLEW_LI
 endif()
 
 
-
-set_target_properties( libParallelFDTD PROPERTIES ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/ )
+set_target_properties( testExec PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin/ )
+set_target_properties( libParallelFDTD PROPERTIES ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/lib/ )
 
 if(WIN32)
 install(FILES ${CMAKE_BINARY_DIR}/lib/libParallelFDTD.lib ${CMAKE_SOURCE_DIR}/lib/Voxelizer.lib
