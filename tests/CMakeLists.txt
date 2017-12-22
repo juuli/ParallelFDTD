@@ -13,42 +13,49 @@ message(STATUS "Boost system: ${Boost_SYSTEM_LIBRARY} ")
 target_link_libraries( AppTest  ${GLUT_LIBRARIES} ${OPENGL_LIBRARIES} ${GLEW_LIBRARIES}
                                 ${VOXELIZER_LIB}
                                 ${Boost_THREAD_LIBRARY} ${Boost_SYSTEM_LIBRARY}
+                                ${Boost_CHRONO_LIBRARY}
                                 ${Boost_DATE_TIME_LIBRARY} ${unix_specific_libraries}
                                 ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY})
 
 target_link_libraries( CudaMeshTest ${GLUT_LIBRARIES} ${OPENGL_LIBRARIES} ${GLEW_LIBRARIES}
                                     ${VOXELIZER_LIB}
                                     ${Boost_THREAD_LIBRARY} ${Boost_SYSTEM_LIBRARY}
+                                    ${Boost_CHRONO_LIBRARY}
                                     ${Boost_DATE_TIME_LIBRARY} ${unix_specific_libraries}
                                     ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY})
 
 target_link_libraries( CudaUtilsTest ${GLUT_LIBRARIES} ${OPENGL_LIBRARIES} ${GLEW_LIBRARIES}
                                     ${VOXELIZER_LIB}
                                     ${Boost_THREAD_LIBRARY} ${Boost_SYSTEM_LIBRARY}
+                                    ${Boost_CHRONO_LIBRARY}
                                     ${Boost_DATE_TIME_LIBRARY} ${unix_specific_libraries}
                                     ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY})
 
 target_link_libraries( FileReaderTest ${GLUT_LIBRARIES} ${OPENGL_LIBRARIES} ${GLEW_LIBRARIES}
                                       ${VOXELIZER_LIB}
                                       ${Boost_THREAD_LIBRARY} ${Boost_SYSTEM_LIBRARY}
+                                      ${Boost_CHRONO_LIBRARY}
                                       ${Boost_DATE_TIME_LIBRARY} ${unix_specific_libraries}
                                       ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY})
 
 target_link_libraries( GeometryHandlerTest ${GLUT_LIBRARIES} ${OPENGL_LIBRARIES} ${GLEW_LIBRARIES}
                                     ${VOXELIZER_LIB}
                                     ${Boost_THREAD_LIBRARY} ${Boost_SYSTEM_LIBRARY}
+                                    ${Boost_CHRONO_LIBRARY}
                                     ${Boost_DATE_TIME_LIBRARY} ${unix_specific_libraries}
                                     ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY})
 
 target_link_libraries( MaterialHandlerTest ${GLUT_LIBRARIES} ${OPENGL_LIBRARIES} ${GLEW_LIBRARIES}
                                     ${VOXELIZER_LIB}
                                     ${Boost_THREAD_LIBRARY} ${Boost_SYSTEM_LIBRARY}
+                                    ${Boost_CHRONO_LIBRARY}
                                     ${Boost_DATE_TIME_LIBRARY} ${unix_specific_libraries}
                                     ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY})
 
 target_link_libraries( VoxelizerTest ${GLUT_LIBRARIES} ${OPENGL_LIBRARIES} ${GLEW_LIBRARIES}
                                     ${VOXELIZER_LIB}
                                     ${Boost_THREAD_LIBRARY} ${Boost_SYSTEM_LIBRARY}
+                                    ${Boost_CHRONO_LIBRARY}
                                     ${Boost_DATE_TIME_LIBRARY} ${unix_specific_libraries}
                                     ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY})
 #set_target_properties( CudaMeshTest PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/ )
