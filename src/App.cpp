@@ -652,7 +652,8 @@ void App::close() {
   cudaSetDevice(0);
   this->resetDevices();
   #ifdef COMPILE_VISUALIZATION
-  delete this->m_window;
+  if(this->m_window)
+    delete this->m_window;
   #endif
 }
 
