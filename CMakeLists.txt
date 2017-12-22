@@ -32,16 +32,17 @@ set(SOURCES_CU ${CMAKE_SOURCE_DIR}/src/kernels/cudaUtils.cu
 
 set( GENERATE_DOXYGEN_DOCS OFF )
 
-set( Boost_USE_STATIC_LIBS OFF )
+set( BOOST_ROOT "C:/Users/jks/Documents/boost_1_63_0")
+set( Boost_USE_STATIC_LIBS ON )
 set( Boost_USE_MULTITHREADED ON )
 set( Boost_USE_STATIC_RUNTIME OFF )
-set( Boost_NO_BOOST_CMAKE ON )
+#set( Boost_NO_BOOST_CMAKE ON )
 
 #If "find package" command gives errors, define the paths manually
-#set( BOOST_ROOT "C:/Program Files/boost/boost_1_55_0" )
+#set( BOOST_ROOT "C:/Program Files/boost/boost_1_55_0" )0
 #set( Boost_INCLUDE_DIRS ${BOOST_ROOT})
-#set( BOOST_LIBRARYDIR ${BOOST_ROOT}/lib)
-set( BOOST_LIBRARYDIR /usr/lib64)
+set( BOOST_LIBRARYDIR ${BOOST_ROOT}/stage/lib)
+#set( BOOST_LIBRARYDIR /usr/lib64)
 
 if(WIN32)
   find_package( Boost 1.41 REQUIRED COMPONENTS system thread date_time chrono python unit_test_framework)
@@ -109,14 +110,14 @@ if(Boost_USE_STATIC_RUNTIME)
 endif()
 
 set( CUDA_NVCC_FLAGS_RELEASE ${CUDA_NVCC_FLAGS_RELEASE};
-                             -gencode arch=compute_30,code=sm_30
+                             -gencode arch=compute_61,code=sm_61
                              -gencode arch=compute_35,code=sm_35
                              -gencode arch=compute_37,code=sm_37
                              -gencode arch=compute_20,code=sm_20
                              )
 
 set( CUDA_NVCC_FLAGS_DEBUG ${CUDA_NVCC_FLAGS_DEBUG};
-                             -gencode arch=compute_30,code=sm_30
+                             -gencode arch=compute_61,code=sm_61
                              -gencode arch=compute_35,code=sm_35
                              -gencode arch=compute_37,code=sm_37
                              -gencode arch=compute_20,code=sm_20
