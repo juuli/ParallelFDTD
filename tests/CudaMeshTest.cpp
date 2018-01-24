@@ -51,10 +51,14 @@ std::vector<unsigned int> getDebugDevices(int num_devices) {
 }
 
 CudaMesh* getTestMesh(unsigned int number_of_partitions) {
-  cudaSetDevice(0);
-  cudaDeviceReset();
-  cudaSetDevice(1);
-  cudaDeviceReset();
+  int number_of_devices = 0;
+  cudasafe(cudaGetDeviceCount(&number_of_devices), "getDeviceCount");
+  std::cout<<"getTestMesh - number of  devices: "<<number_of_devices<<std::endl;
+  for (int i = 0; i<number_of_devices; i++) {
+    cudasafe(cudaSetDevice(i), "cudaSetDevice");
+    cudasafe(cudaDeviceReset(), "cudaDeviceReset");
+  }
+  cudasafe(cudaSetDevice(0), "cudaSetDevice");
 
   FileReader fr;
 
@@ -85,18 +89,25 @@ CudaMesh* getTestMesh(unsigned int number_of_partitions) {
   unsigned char* d_position_idx = (unsigned char*)NULL;
   unsigned char* d_material_idx = (unsigned char*)NULL;
   uint3 voxelization_dim = make_uint3(0,0,0);
+  uint3 vox_dim = get_Geometry_surface_Voxelization_dims(
+                    geometry.getVerticePtr(),
+                    geometry.getIndexPtr(),
+                    geometry.getNumberOfTriangles(),
+                    geometry.getNumberOfVertices(),
+                    (double)parameters.getDx());
 
   // Voxelize the geometry
-  voxelizeGeometry(geometry.getVerticePtr(),
-                   geometry.getIndexPtr(),
-                   materials.getMaterialIdxPtr(),
-                   geometry.getNumberOfTriangles(),
-                   geometry.getNumberOfVertices(),
-                   materials.getNumberOfUniqueMaterials(),
-                   parameters.getDx(),
-                   &d_position_idx,
-                   &d_material_idx,
-                   &voxelization_dim);
+  voxelizeGeometry_surface_6_separating(geometry.getVerticePtr(),
+                                       geometry.getIndexPtr(),
+                                       materials.getMaterialIdxPtr(),
+                                       geometry.getNumberOfTriangles(),
+                                       geometry.getNumberOfVertices(),
+                                       materials.getNumberOfUniqueMaterials(),
+                                       parameters.getDx(),
+                                       &d_position_idx,
+                                       &d_material_idx,
+                                       &voxelization_dim,
+                                       0, vox_dim.z);
 
   CudaMesh* cuda_mesh = new CudaMesh();
     // Initialize the mesh
@@ -131,11 +142,16 @@ CudaMesh* getTestMesh(unsigned int number_of_partitions) {
 }
 
 CudaMesh* getTestMeshDouble(unsigned int number_of_partitions) {
-  cudaSetDevice(0);
-  cudaDeviceReset();
-  cudaSetDevice(1);
-  cudaDeviceReset();
+  int number_of_devices = 0;
+  cudasafe(cudaGetDeviceCount(&number_of_devices), "getDeviceCount");
+  std::cout<<"getTestMeshDouble - number of  devices: "<<number_of_devices<<std::endl;
+  for (int i = 0; i<number_of_devices; i++) {
+    cudasafe(cudaSetDevice(i), "cudaSetDevice");
+    cudasafe(cudaDeviceReset(), "cudaDeviceReset");
+  }
 
+  cudasafe(cudaSetDevice(0), "cudaSetDevice");
+  
   FileReader fr;
 
   fr.readVTK(&geometry, "./Data/hytti.vtk");
@@ -163,17 +179,36 @@ CudaMesh* getTestMeshDouble(unsigned int number_of_partitions) {
   unsigned char* d_material_idx = (unsigned char*)NULL;
   uint3 voxelization_dim = make_uint3(0,0,0);
   // Voxelize the geometry
-  voxelizeGeometry(geometry.getVerticePtr(),
-                   geometry.getIndexPtr(),
-                   materials.getMaterialIdxPtr(),
-                   geometry.getNumberOfTriangles(),
-                   geometry.getNumberOfVertices(),
-                   materials.getNumberOfUniqueMaterials(),
-                   parameters.getDx(),
-                   &d_position_idx,
-                   &d_material_idx,
-                   &voxelization_dim);
+  //voxelizeGeometry_solid(geometry.getVerticePtr(),
+  //                 geometry.getIndexPtr(),
+  //                 materials.getMaterialIdxPtr(),
+  //                 geometry.getNumberOfTriangles(),
+  //                 geometry.getNumberOfVertices(),
+  //                 materials.getNumberOfUniqueMaterials(),
+  //                 parameters.getDx(),
+  //                 &d_position_idx,
+  //                 &d_material_idx,
+  //                 &voxelization_dim);
 
+  uint3 vox_dim = get_Geometry_surface_Voxelization_dims(
+    geometry.getVerticePtr(),
+    geometry.getIndexPtr(),
+    geometry.getNumberOfTriangles(),
+    geometry.getNumberOfVertices(),
+    (double)parameters.getDx());
+
+  // Voxelize the geometry
+  voxelizeGeometry_surface_6_separating(geometry.getVerticePtr(),
+                                        geometry.getIndexPtr(),
+                                        materials.getMaterialIdxPtr(),
+                                        geometry.getNumberOfTriangles(),
+                                        geometry.getNumberOfVertices(),
+                                        materials.getNumberOfUniqueMaterials(),
+                                        parameters.getDx(),
+                                        &d_position_idx,
+                                        &d_material_idx,
+                                        &voxelization_dim,
+                                        0, vox_dim.z);
   CudaMesh* cuda_mesh = new CudaMesh();
   cuda_mesh->setDouble(true);
     // Initialize the mesh
@@ -351,6 +386,8 @@ BOOST_AUTO_TEST_CASE(CudaMesh_get_set_multi) {
 
 
 BOOST_AUTO_TEST_CASE(CudaMesh_test_1_partition) {
+  cudasafe(cudaPeekAtLastError(),
+           "CudaMesh_test_1_partition_begin");
   CudaMesh* mesh = getTestMesh(1);
   mesh->setSample(3.0, 0,0,0);
   float sample = mesh->getSample<float>(0,0,0);
