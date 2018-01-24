@@ -217,6 +217,15 @@ float launchFDTD3dStep_double(CudaMesh* d_mesh,
 
 //// Kernels
 
+template <typename T>
+__global__ void fdtd3dStd(const unsigned char* __restrict d_position_ptr,
+                          const unsigned char* __restrict d_material_idx_ptr,
+                          const T* __restrict P, T* P_past,
+                          const T* d_params_ptr,
+                          const T* d_material_ptr,
+                          mesh_size_t d_dim_xy,
+                          mesh_size_t d_dim_x);
+
 ///////////////////////////////////////////////////////////////////////////////
 /// \brief Kernel for FDTD step using the forward difference boundary
 /// \tparam T defines the precision used in the calculation (float / double)

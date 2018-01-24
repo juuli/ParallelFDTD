@@ -28,6 +28,123 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+void launchHaloKernels(CudaMesh* d_mesh, SimulationParameters* sp) {
+  dim3 block(d_mesh->getBlockX(), d_mesh->getBlockY(), 1);
+  dim3 grid(d_mesh->getGridDimX(), d_mesh->getGridDimY(), 1);
+
+  for (unsigned int i = 0; i<d_mesh->getNumberOfPartitions(); i++) {
+    cudasafe(cudaSetDevice(d_mesh->getDeviceAt(i)), "kernels3d.cu: launchFDTD3d - set device");
+    mesh_size_t part_size = d_mesh->getPartitionSize(i);
+
+    // Update down
+    mesh_size_t down_address = d_mesh->getDimXY();
+    fdtd3dStd<float><<<grid, block, 0, d_mesh->down_streams_[i]>>>
+                                      (d_mesh->getPositionIdxPtrAt(i)+down_address,
+                                      d_mesh->getMaterialIdxPtrAt(i)+down_address,
+                                      d_mesh->getPressurePtrAt(i)+down_address,
+                                      d_mesh->getPastPressurePtrAt(i)+down_address,
+                                      d_mesh->getParameterPtrAt(i),
+                                      d_mesh->getMaterialPtrAt(i),
+                                      d_mesh->getDimXY(),
+                                      d_mesh->getDimX());
+    
+    // Update up halo
+    mesh_size_t up_address = (mesh_size_t)(part_size-2)*d_mesh->getDimXY();
+    fdtd3dStd<float><<<grid, block, 0, d_mesh->up_streams_[i]>>>
+                                      (d_mesh->getPositionIdxPtrAt(i)+up_address,
+                                      d_mesh->getMaterialIdxPtrAt(i)+up_address,
+                                      d_mesh->getPressurePtrAt(i)+up_address,
+                                      d_mesh->getPastPressurePtrAt(i)+up_address,
+                                      d_mesh->getParameterPtrAt(i),
+                                      d_mesh->getMaterialPtrAt(i),
+                                      d_mesh->getDimXY(),
+                                      d_mesh->getDimX());
+  }
+}
+
+void launchMainKernels(CudaMesh* d_mesh, SimulationParameters* sp) {
+  dim3 block(d_mesh->getBlockX(), d_mesh->getBlockY(), 1);
+  dim3 grid(d_mesh->getGridDimX(), d_mesh->getGridDimY(), d_mesh->getPartitionSize());
+
+  for (unsigned int i = 0; i < d_mesh->getNumberOfPartitions(); i++) {
+    cudasafe(cudaSetDevice(d_mesh->getDeviceAt(i)), "kernels3d.cu: launchFDTD3d - set device");
+
+    // Halos are updated at this point, update the center domain
+    grid.z = d_mesh->getPartitionSize(i)-4;
+    mesh_size_t start_address = 2*d_mesh->getDimXY();
+    if (sp->getUpdateType()==SRL_FORWARD) {
+      fdtd3dStd<float><<<grid, block, 0, d_mesh->kernel_streams_[i] >>>
+                      (d_mesh->getPositionIdxPtrAt(i)+start_address,
+                       d_mesh->getMaterialIdxPtrAt(i)+start_address,
+                       d_mesh->getPressurePtrAt(i)+start_address,
+                       d_mesh->getPastPressurePtrAt(i)+start_address,
+                       d_mesh->getParameterPtrAt(i),
+                       d_mesh->getMaterialPtrAt(i),
+                       d_mesh->getDimXY(),
+                       d_mesh->getDimX());
+}
+  } // End FDTD partition loop
+}
+
+void launchHaloKernelsDouble(CudaMesh* d_mesh, SimulationParameters* sp) {
+  dim3 block(d_mesh->getBlockX(), d_mesh->getBlockY(), 1);
+  dim3 grid(d_mesh->getGridDimX(), d_mesh->getGridDimY(), 1);
+
+  for (unsigned int i = 0; i<d_mesh->getNumberOfPartitions(); i++) {
+    cudasafe(cudaSetDevice(d_mesh->getDeviceAt(i)), "kernels3d.cu: launchFDTD3d - set device");
+    mesh_size_t part_size = d_mesh->getPartitionSize(i);
+
+    // Update down
+    mesh_size_t down_address = d_mesh->getDimXY();
+    fdtd3dStd<double><<<grid, block, 0, d_mesh->down_streams_[i]>>>
+      (d_mesh->getPositionIdxPtrAt(i)+down_address,
+       d_mesh->getMaterialIdxPtrAt(i)+down_address,
+       d_mesh->getPressureDoublePtrAt(i)+down_address,
+       d_mesh->getPastPressureDoublePtrAt(i)+down_address,
+       d_mesh->getParameterPtrDoubleAt(i),
+       d_mesh->getMaterialPtrDoubleAt(i),
+       d_mesh->getDimXY(),
+       d_mesh->getDimX());
+
+    // Update up halo
+    mesh_size_t up_address = (mesh_size_t)(part_size-2)*d_mesh->getDimXY();
+    fdtd3dStd<double><<<grid, block, 0, d_mesh->up_streams_[i]>>>
+      (d_mesh->getPositionIdxPtrAt(i)+up_address,
+       d_mesh->getMaterialIdxPtrAt(i)+up_address,
+       d_mesh->getPressureDoublePtrAt(i)+up_address,
+       d_mesh->getPastPressureDoublePtrAt(i)+up_address,
+       d_mesh->getParameterPtrDoubleAt(i),
+       d_mesh->getMaterialPtrDoubleAt(i),
+       d_mesh->getDimXY(),
+       d_mesh->getDimX());
+  }
+}
+
+void launchMainKernelsDouble(CudaMesh* d_mesh, SimulationParameters* sp) {
+  dim3 block(d_mesh->getBlockX(), d_mesh->getBlockY(), 1);
+  dim3 grid(d_mesh->getGridDimX(), d_mesh->getGridDimY(), d_mesh->getPartitionSize());
+
+  for (unsigned int i = 0; i < d_mesh->getNumberOfPartitions(); i++) {
+    cudasafe(cudaSetDevice(d_mesh->getDeviceAt(i)), "kernels3d.cu: launchFDTD3d - set device");
+
+    // Halos are updated at this point, update the center domain
+    grid.z = d_mesh->getPartitionSize(i)-4;
+    mesh_size_t start_address = 2*d_mesh->getDimXY();
+    if (sp->getUpdateType()==SRL_FORWARD) {
+      fdtd3dStd<double><<<grid, block, 0, d_mesh->kernel_streams_[i]>>>
+        (d_mesh->getPositionIdxPtrAt(i)+start_address,
+         d_mesh->getMaterialIdxPtrAt(i)+start_address,
+         d_mesh->getPressureDoublePtrAt(i)+start_address,
+         d_mesh->getPastPressureDoublePtrAt(i)+start_address,
+         d_mesh->getParameterPtrDoubleAt(i),
+         d_mesh->getMaterialPtrDoubleAt(i),
+         d_mesh->getDimXY(),
+         d_mesh->getDimX());
+    }
+  } // End FDTD partition loop
+}
+
+
 float launchFDTD3d(CudaMesh* d_mesh,
                    SimulationParameters* sp,
                    float* h_return_ptr,
@@ -112,61 +229,18 @@ float launchFDTD3d(CudaMesh* d_mesh,
       cudasafe(cudaMemcpy(dest, src,  sizeof(float), cudaMemcpyDeviceToDevice), "Memcopy");
     } // End receiver Loop
 
-    ////// FDTD partition loop
-    for(unsigned int i = 0; i < d_mesh->getNumberOfPartitions(); i++) {
-      cudasafe(cudaSetDevice(d_mesh->getDeviceAt(i)), "kernels3d.cu: launchFDTD3d - set device");
+    launchHaloKernels(d_mesh, sp);
+    cudasafe(cudaDeviceSynchronize(), "kernels3d.cu: launchFDTD3d - cudaDeviceSynchronize after Halo and swap");
+    
+    d_mesh->switchHalosAsync();
 
-      grid.z = d_mesh->getPartitionSize(i)-1;
-
-      if(sp->getUpdateType() == SRL_FORWARD) {
-      fdtd3dStdMaterials<float><<<grid, block>>>(d_mesh->getPositionIdxPtrAt(i),
-                                                 d_mesh->getMaterialIdxPtrAt(i),
-                                                 d_mesh->getPressurePtrAt(i),
-                                                 d_mesh->getPastPressurePtrAt(i),
-                                                 d_mesh->getParameterPtrAt(i),
-                                                 d_mesh->getMaterialPtrAt(i),
-                                                 d_mesh->getDimXY(),
-                                                 d_mesh->getDimX());
-      }
-
-
-      if(sp->getUpdateType() == SRL) {
-      fdtd3dStdKowalczykMaterials<float><<<grid, block>>>(d_mesh->getPositionIdxPtrAt(i),
-                                                          d_mesh->getMaterialIdxPtrAt(i),
-                                                          d_mesh->getPressurePtrAt(i),
-                                                          d_mesh->getPastPressurePtrAt(i),
-                                                          d_mesh->getParameterPtrAt(i),
-                                                          d_mesh->getMaterialPtrAt(i),
-                                                          d_mesh->getDimXY(),
-                                                          d_mesh->getDimX());
-      }
-
-
-      if(sp->getUpdateType() == SHARED) {
-      block.x = 32; block.y = 4; block.z = 1;
-      mesh_size_t dim_z = grid.z;
-      grid.z = 1; // the z-dimension is gone through in the kernel
-      fdtd3dSliced<float,32,4><<<grid, block>>>(d_mesh->getPositionIdxPtrAt(i),
-                                                d_mesh->getMaterialIdxPtrAt(i),
-                                                d_mesh->getPressurePtrAt(i),
-                                                d_mesh->getPastPressurePtrAt(i),
-                                                d_mesh->getParameterPtrAt(i),
-                                                d_mesh->getMaterialPtrAt(i),
-                                                d_mesh->getDimXY(),
-                                                d_mesh->getDimX(),
-                                                dim_z);
-      }
-    } // End FDTD partition loop
-
+    launchMainKernels(d_mesh, sp);
     cudasafe(cudaDeviceSynchronize(), "kernels3d.cu: launchFDTD3d - cudaDeviceSynchronize after FDTD");
-    cudasafe(cudaPeekAtLastError(), "kernels3d.cu: launchFDTD3d - Peek after launch");
-
+  
     ////// TODO boundary loop
 
     d_mesh->flipPressurePointers();
-    d_mesh->switchHalos();
 
-    cudasafe(cudaDeviceSynchronize(), "cudaDeviceSynchronize after step");
     if((step%PROGRESS_MOD) == 0) {
       step_end = clock()-step_start;
       progressCallback(step, sp->getNumSteps(), ((((float)step_end/CLOCKS_PER_SEC))));
@@ -210,17 +284,6 @@ float launchFDTD3dDouble(CudaMesh* d_mesh,
   dim3 grid(d_mesh->getGridDimX(),
             d_mesh->getGridDimY(),
             d_mesh->getPartitionSize());
-
-  c_log_msg(LOG_DEBUG, "kernels3d.cu: launchFDTD3dDouble - Mesh dim: x %d y %d z %d",
-            d_mesh->getDimX(), d_mesh->getDimY(), d_mesh->getDimZ());
-  c_log_msg(LOG_DEBUG, "kernels3d.cu: launchFDTD3dDouble - Block dim: x %d y %d z %d",
-            block.x, block.y, block.z);
-  c_log_msg(LOG_DEBUG, "kernels3d.cu: launchFDTD3dDouble - Grid dim: x %u, y %u z %u",
-            grid.x, grid.y, grid.z);
-
-  c_log_msg(LOG_DEBUG, "kernels3d.cu: launchFDTD3dDouble - Number of partitions: %u", d_mesh->getNumberOfPartitions());
-  c_log_msg(LOG_INFO, "kernels3d.cu: launchFDTD3dDouble  - Number of steps: %u", sp->getNumSteps());
-
 
   /////////////////////////////////////////////////////////////////////////////
   // Allocate return data on the device
@@ -277,61 +340,17 @@ float launchFDTD3dDouble(CudaMesh* d_mesh,
       cudasafe(cudaMemcpy(dest, src,  sizeof(double), cudaMemcpyDeviceToDevice), "Memcopy");
     } // End receiver Loop
 
-    ////// FDTD partition loop
-    for(unsigned int i = 0; i < d_mesh->getNumberOfPartitions(); i++) {
-      cudasafe(cudaSetDevice(d_mesh->getDeviceAt(i)), "kernels3d.cu: launchFDTD3dDouble - set device");
-
-      grid.z = d_mesh->getPartitionSize(i)-1;
-
-      if(sp->getUpdateType() == SRL_FORWARD)
-      fdtd3dStdMaterials<double><<<grid, block>>>(d_mesh->getPositionIdxPtrAt(i),
-                                                  d_mesh->getMaterialIdxPtrAt(i),
-                                                  d_mesh->getPressureDoublePtrAt(i),
-                                                  d_mesh->getPastPressureDoublePtrAt(i),
-                                                  d_mesh->getParameterPtrDoubleAt(i),
-                                                  d_mesh->getMaterialPtrDoubleAt(i),
-                                                  d_mesh->getDimXY(),
-                                                  d_mesh->getDimX());
-
-
-
-      if(sp->getUpdateType() == SRL)
-      fdtd3dStdKowalczykMaterials<double><<<grid, block>>>(d_mesh->getPositionIdxPtrAt(i),
-                                                           d_mesh->getMaterialIdxPtrAt(i),
-                                                           d_mesh->getPressureDoublePtrAt(i),
-                                                           d_mesh->getPastPressureDoublePtrAt(i),
-                                                           d_mesh->getParameterPtrDoubleAt(i),
-                                                           d_mesh->getMaterialPtrDoubleAt(i),
-                                                           d_mesh->getDimXY(),
-                                                           d_mesh->getDimX());
-
-
-      if(sp->getUpdateType() == SHARED) {
-      block.x = 32; block.y = 4; block.z = 1;
-      mesh_size_t dim_z = grid.z;
-      grid.z = 1; // the z-dimension is gone through in the kernel
-      fdtd3dSliced<double, 32,4><<<grid, block>>>(d_mesh->getPositionIdxPtrAt(i),
-                                                  d_mesh->getMaterialIdxPtrAt(i),
-                                                  d_mesh->getPressureDoublePtrAt(i),
-                                                  d_mesh->getPastPressureDoublePtrAt(i),
-                                                  d_mesh->getParameterPtrDoubleAt(i),
-                                                  d_mesh->getMaterialPtrDoubleAt(i),
-                                                  d_mesh->getDimXY(),
-                                                  d_mesh->getDimX(),
-                                                  dim_z);
-      }
-
-
-    } // End FDTD partition loop
-
+    launchHaloKernelsDouble(d_mesh, sp);
+    cudasafe(cudaDeviceSynchronize(), "kernels3d.cu: launchFDTD3dDouble - cudaDeviceSynchronize after Halo update");
+    
+    d_mesh->switchHalosAsync();
+    
+    launchMainKernelsDouble(d_mesh, sp);
     cudasafe(cudaDeviceSynchronize(), "kernels3d.cu: launchFDTD3dDouble - cudaDeviceSynchronize after FDTD");
-    cudasafe(cudaPeekAtLastError(), "kernels3d.cu: launchFDTD3dDouble - Peek after launch");
 
     ////// TODO boundary loop
 
     d_mesh->flipPressurePointers();
-    d_mesh->switchHalos();
-
     cudasafe(cudaDeviceSynchronize(), "cudaDeviceSynchronize after step");
 
     if((step%PROGRESS_MOD) == 0) {
@@ -380,13 +399,6 @@ void launchFDTD3dStep(CudaMesh* d_mesh,
               d_mesh->getGridDimY(),
               d_mesh->getPartitionSize()-1);
 
-    c_log_msg(LOG_VERBOSE, "kernels3d.cu: launchFDTD3dStep - Mesh dim: x %d y %d z %d",
-              d_mesh->getDimX(), d_mesh->getDimY(), d_mesh->getDimZ());
-    c_log_msg(LOG_VERBOSE, "kernels3d.cu: launchFDTD3dStep - Block dim: x %d y %d z %d",
-              block.x, block.y, block.z);
-    c_log_msg(LOG_VERBOSE, "kernels3d.cu: launchFDTD3dStep - Grid dim: x %u, y %u z %u",
-              grid.x, grid.y, grid.z);
-
     ///////// Source Loop
     for(unsigned int i = 0; i < sp->getNumSources(); i++) {
       float sample = sp->getSourceSample(i, step);
@@ -408,55 +420,14 @@ void launchFDTD3dStep(CudaMesh* d_mesh,
 
     }
 
-    ////// FDTD update loop
-    for(unsigned int i = 0; i < d_mesh->getNumberOfPartitions(); i++) {
-      cudasafe(cudaSetDevice(d_mesh->getDeviceAt(i)), "kernels3d.cu: launchFDTD3d - set device");
-      grid.z = d_mesh->getPartitionSize(i);
-      grid.z = grid.z-1;
+    launchHaloKernels(d_mesh, sp);
+    cudasafe(cudaDeviceSynchronize(), "kernels3d.cu: launchFDTD3d - cudaDeviceSynchronize after Halo and swap");
 
-      if(sp->getUpdateType() == SRL_FORWARD) {
-      fdtd3dStdMaterials<float><<<grid, block>>> (d_mesh->getPositionIdxPtrAt(i),
-                                                  d_mesh->getMaterialIdxPtrAt(i),
-                                                  d_mesh->getPressurePtrAt(i),
-                                                  d_mesh->getPastPressurePtrAt(i),
-                                                  d_mesh->getParameterPtrAt(i),
-                                                  d_mesh->getMaterialPtrAt(i),
-                                                  d_mesh->getDimXY(),
-                                                  d_mesh->getDimX());
-      }
+    d_mesh->switchHalosAsync();
 
-      if(sp->getUpdateType() == SRL) {
-      fdtd3dStdKowalczykMaterials<float><<<grid, block>>> (d_mesh->getPositionIdxPtrAt(i),
-                                                           d_mesh->getMaterialIdxPtrAt(i),
-                                                           d_mesh->getPressurePtrAt(i),
-                                                           d_mesh->getPastPressurePtrAt(i),
-                                                           d_mesh->getParameterPtrAt(i),
-                                                           d_mesh->getMaterialPtrAt(i),
-                                                           d_mesh->getDimXY(),
-                                                           d_mesh->getDimX());
-      }
-
-
-      if(sp->getUpdateType() == SHARED) {
-      block.x = 32; block.y = 4; block.z = 1;
-      mesh_size_t dim_z = grid.z;
-      grid.z = 1; // the z-dimension is gone through in the kernel
-      fdtd3dSliced<float,32,4><<<grid, block>>> (d_mesh->getPositionIdxPtrAt(i),
-                                                 d_mesh->getMaterialIdxPtrAt(i),
-                                                 d_mesh->getPressurePtrAt(i),
-                                                 d_mesh->getPastPressurePtrAt(i),
-                                                 d_mesh->getParameterPtrAt(i),
-                                                 d_mesh->getMaterialPtrAt(i),
-                                                 d_mesh->getDimXY(),
-                                                 d_mesh->getDimX(),
-                                                 dim_z);
-      }
-
-    } // End FDTD loop
-
+    launchMainKernels(d_mesh, sp);
     cudasafe(cudaDeviceSynchronize(), "kernels3d.cu: launchFDTD3d - cudaDeviceSynchronize after FDTD");
-    cudasafe(cudaPeekAtLastError(), "kernels3d.cu: launchFDTD3dStep - Peek after launch");
-
+    
     ////// TODO boundary loop
 
     if(past_step_directon == step_direction)
@@ -464,14 +435,10 @@ void launchFDTD3dStep(CudaMesh* d_mesh,
 
     past_step_directon = step_direction;
 
-    d_mesh->switchHalos();
-
     if((step%PROGRESS_MOD) == 0) {
       step_end = clock()-step_start;
       progressCallback(step, sp->getNumSteps(), ((((float)step_end/CLOCKS_PER_SEC))));
     }
-    cudasafe(cudaDeviceSynchronize(), "launchFDTD3dStep: synchDevices at the end");
-
 }
 
 float launchFDTD3dStep_single(CudaMesh* d_mesh,
@@ -531,50 +498,7 @@ float launchFDTD3dStep_single(CudaMesh* d_mesh,
 
   cudasafe(cudaDeviceSynchronize(), "kernels3d.cu: launchFDTD3dStep_single - cudaDeviceSynchronize after Source insert");
 
-  ////// FDTD partition loop
-  for(unsigned int i = 0; i < d_mesh->getNumberOfPartitions(); i++)
-  {
-    cudasafe(cudaSetDevice(d_mesh->getDeviceAt(i)), "kernels3d.cu: launchFDTD3dStep_single - set device");
-
-    grid.z = d_mesh->getPartitionSize(i)-1;
-
-    if(sp->getUpdateType() == SRL_FORWARD) {
-      fdtd3dStdMaterials<float><<<grid, block>>>(d_mesh->getPositionIdxPtrAt(i),
-                                                 d_mesh->getMaterialIdxPtrAt(i),
-                                                 d_mesh->getPressurePtrAt(i),
-                                                 d_mesh->getPastPressurePtrAt(i),
-                                                 d_mesh->getParameterPtrAt(i),
-                                                 d_mesh->getMaterialPtrAt(i),
-                                                 d_mesh->getDimXY(),
-                                                 d_mesh->getDimX());
-    }
-
-    if(sp->getUpdateType() == SRL) {
-      fdtd3dStdKowalczykMaterials<float><<<grid, block>>>(d_mesh->getPositionIdxPtrAt(i),
-                                                          d_mesh->getMaterialIdxPtrAt(i),
-                                                          d_mesh->getPressurePtrAt(i),
-                                                          d_mesh->getPastPressurePtrAt(i),
-                                                          d_mesh->getParameterPtrAt(i),
-                                                          d_mesh->getMaterialPtrAt(i),
-                                                          d_mesh->getDimXY(),
-                                                          d_mesh->getDimX());
-    }
-
-    if(sp->getUpdateType() == SHARED) {
-      block.x = 32; block.y = 4; block.z = 1;
-      mesh_size_t dim_z = grid.z;
-      grid.z = 1; // the z-dimension is gone through in the kernel
-      fdtd3dSliced<float,32,4><<<grid, block>>>(d_mesh->getPositionIdxPtrAt(i),
-                                                d_mesh->getMaterialIdxPtrAt(i),
-                                                d_mesh->getPressurePtrAt(i),
-                                                d_mesh->getPastPressurePtrAt(i),
-                                                d_mesh->getParameterPtrAt(i),
-                                                d_mesh->getMaterialPtrAt(i),
-                                                d_mesh->getDimXY(),
-                                                d_mesh->getDimX(),
-                                                dim_z);
-    }
-  } // End FDTD partition loop
+  launchMainKernels(d_mesh, sp);
 
   cudasafe(cudaDeviceSynchronize(), "kernels3d.cu: launchFDTD3dStep_single - cudaDeviceSynchronize after FDTD");
   cudasafe(cudaPeekAtLastError(), "kernels3d.cu: launchFDTD3dStep_single - Peek after launch");
@@ -656,52 +580,7 @@ float launchFDTD3dStep_double(CudaMesh* d_mesh,
 
   cudasafe(cudaDeviceSynchronize(), "kernels3d.cu: launchFDTD3dStep_double - cudaDeviceSynchronize after Source insert");
 
-  ////// FDTD partition loop
-  for(unsigned int i = 0; i < d_mesh->getNumberOfPartitions(); i++)
-  {
-    cudasafe(cudaSetDevice(d_mesh->getDeviceAt(i)), "kernels3d.cu: launchFDTD3dStep_double - set device");
-    grid.z = d_mesh->getPartitionSize(i)-1;
-
-    if(sp->getUpdateType() == SRL_FORWARD)
-    {
-      fdtd3dStdMaterials<double><<<grid, block>>>(d_mesh->getPositionIdxPtrAt(i),
-                                                  d_mesh->getMaterialIdxPtrAt(i),
-                                                  d_mesh->getPressureDoublePtrAt(i),
-                                                  d_mesh->getPastPressureDoublePtrAt(i),
-                                                  d_mesh->getParameterPtrDoubleAt(i),
-                                                  d_mesh->getMaterialPtrDoubleAt(i),
-                                                  d_mesh->getDimXY(),
-                                                  d_mesh->getDimX());
-    }
-
-    if(sp->getUpdateType() == SRL)
-    {
-      fdtd3dStdKowalczykMaterials<double><<<grid, block>>>(d_mesh->getPositionIdxPtrAt(i),
-                                                           d_mesh->getMaterialIdxPtrAt(i),
-                                                           d_mesh->getPressureDoublePtrAt(i),
-                                                           d_mesh->getPastPressureDoublePtrAt(i),
-                                                           d_mesh->getParameterPtrDoubleAt(i),
-                                                           d_mesh->getMaterialPtrDoubleAt(i),
-                                                           d_mesh->getDimXY(),
-                                                           d_mesh->getDimX());
-    }
-
-    if(sp->getUpdateType() == SHARED)
-    {
-      block.x = 32; block.y = 4; block.z = 1;
-      mesh_size_t dim_z = grid.z;
-      grid.z = 1; // the z-dimension is gone through in the kernel
-      fdtd3dSliced<double, 32,4><<<grid, block>>>(d_mesh->getPositionIdxPtrAt(i),
-                                                  d_mesh->getMaterialIdxPtrAt(i),
-                                                  d_mesh->getPressureDoublePtrAt(i),
-                                                  d_mesh->getPastPressureDoublePtrAt(i),
-                                                  d_mesh->getParameterPtrDoubleAt(i),
-                                                  d_mesh->getMaterialPtrDoubleAt(i),
-                                                  d_mesh->getDimXY(),
-                                                  d_mesh->getDimX(),
-                                                  dim_z);
-    }
-  } // End FDTD partition loop
+  launchMainKernels(d_mesh, sp);
 
   cudasafe(cudaDeviceSynchronize(), "kernels3d.cu: launchFDTD3dStep_double - cudaDeviceSynchronize after FDTD");
   cudasafe(cudaPeekAtLastError(), "kernels3d.cu: launchFDTD3dStep_double - Peek after launch");
@@ -728,6 +607,43 @@ float launchFDTD3dStep_double(CudaMesh* d_mesh,
   return (((float)end_t/CLOCKS_PER_SEC)/step);
 }
 
+template <typename T>
+__global__ void fdtd3dStd(const unsigned char* __restrict d_position_ptr,
+                          const unsigned char* __restrict d_material_idx_ptr,
+                          const T* __restrict P, T* P_past,
+                          const T* d_params_ptr,
+                          const T* d_material_ptr,
+                          mesh_size_t d_dim_xy,
+                          mesh_size_t d_dim_x) {
+
+  mesh_size_t x = blockIdx.x*blockDim.x+threadIdx.x;
+  mesh_size_t y = blockIdx.y*blockDim.y+threadIdx.y;
+  mesh_size_t z = blockIdx.z*blockDim.z;
+  
+  mesh_size_t current = z*d_dim_xy+d_dim_x*y+x;
+
+  unsigned char pos = d_position_ptr[current];
+  T position = (T)(pos&FORWARD_POSITION_MASK);
+  T switchBit = (T)(pos>>INSIDE_SWITCH);
+
+  unsigned int mat_idx = ((unsigned int)d_material_idx_ptr[current])*20+d_params_ptr[3];
+  T beta = 0.5*((T)d_material_ptr[mat_idx]*(6.f-position)*d_params_ptr[0]);
+
+  T p_z_ = P[(current-d_dim_xy)];
+  T _p_z = P[(current+d_dim_xy)];
+  T p_y_ = P[(current-d_dim_x)];
+  T _p_y = P[(current+d_dim_x)];
+  T p_x_ = P[(current-1)];
+  T p = P[current];
+  T _p_x = P[(current+1)];
+
+  T _p = P_past[current];
+
+  T S = _p_z+p_z_+_p_y+p_y_+_p_x+p_x_;
+  T ret = switchBit*(1.f/(1.f+beta))*((2.f-position*d_params_ptr[1])*p+d_params_ptr[1]*S-(1.f-beta)*_p);
+
+  P_past[current] = ret;
+}
 
 template <typename T>
 __global__ void fdtd3dStdMaterials(const unsigned char* __restrict d_position_ptr,

@@ -68,6 +68,7 @@ public:
   CudaMesh()
   : double_(false),
     dif_order_(0),
+    peer_access_(false),
     number_of_partitions_(0),
     partition_size_(0),
     h_material_coef_ptr_(NULL),
@@ -91,6 +92,7 @@ public:
   ////// Mesh
   bool double_; // mesh in double precision
   unsigned int dif_order_; // frequency depending boundaries
+  bool peer_access_;
 
   std::vector<unsigned char*> position_idx_ptr_;
   std::vector<unsigned char*> material_idx_ptr_;
@@ -111,6 +113,11 @@ public:
   std::vector<double*> pressures_past_double_;
   std::vector<double*> parameters_double_;
   std::vector<double*> materials_double_;
+
+  // Halo mem exchange streams
+  std::vector<cudaStream_t> kernel_streams_;
+  std::vector<cudaStream_t> up_streams_;
+  std::vector<cudaStream_t> down_streams_;
 
   // NEW template
   /*
@@ -165,7 +172,8 @@ public:
   void destroyPartitions() {
     c_log_msg(LOG_VERBOSE, "CudaMesh destructor");
     for(unsigned int i = 0; i < this->number_of_partitions_; i++) {
-      cudaSetDevice(i);
+      int k = this->getDeviceAt(i);
+      cudaSetDevice(k);
       destroyMem(position_idx_ptr_.at(i));
       destroyMem(material_idx_ptr_.at(i));
       if(this->isDouble()) {
@@ -223,11 +231,11 @@ public:
     {return (mesh_size_t)this->partition_indexing_.at(partition_idx).size()*this->getDimXY();}
 
   unsigned int getNumberOfPartitions() {return (unsigned int)this->partition_indexing_.size();}
-  unsigned int getPartitionSize() {return (unsigned int)this->partition_indexing_.at(0).size();}
+  mesh_size_t getPartitionSize() {return (mesh_size_t)this->partition_indexing_.at(0).size();}
 
-  unsigned int getPartitionSize(int partition) {
-    unsigned int ret = 0; unsigned int np = this->getNumberOfPartitions();
-    if(partition < (int)np) ret = (unsigned int)this->partition_indexing_.at(partition).size();
+  mesh_size_t getPartitionSize(int partition) {
+    mesh_size_t ret = 0; int np = this->getNumberOfPartitions();
+    if(partition < (int)np) ret = (mesh_size_t)this->partition_indexing_.at(partition).size();
     return ret;}
 
   mesh_size_t getFirstSliceIdx(int partition) {return this->partition_indexing_.at(partition).at(0);}
@@ -477,6 +485,47 @@ public:
     cudaDeviceSynchronize();
   }
 
+  template<typename T>
+  void switchHalosAsync(std::vector<T*>& domain,
+                        std::vector< std::vector< mesh_size_t > >& slices) {
+
+    unsigned int slice_s = this->getDimXY();
+    for (unsigned int i = 0; i < (unsigned int)slices.size()-1; i++) {
+      unsigned int src_1 = *(slices.at(i).end()-2);
+      unsigned int dest_1 = slices.at(i+1).at(0);
+      unsigned int src_2 = slices.at(i+1).at(1);
+      unsigned int dest_2 = *(slices.at(i).end()-1);
+      unsigned int f_i = slices.at(i).at(0);
+      unsigned int f_i1 = slices.at(i+1).at(0);
+
+      T* s1 = domain.at(i)+(src_1-f_i)*slice_s;
+      T* d1 = domain.at(i+1)+(dest_1-f_i1)*slice_s;
+      T* s2 = domain.at(i+1)+(src_2-f_i1)*slice_s;
+      T* d2 = domain.at(i)+(dest_2-f_i)*slice_s;
+
+      unsigned int dev_1 = this->getDeviceAt(i);
+      unsigned int dev_2 = this->getDeviceAt(i+1);
+      
+      if(!this->peer_access_) {
+        cudasafe(cudaMemcpyAsync(d1, s1,
+                                 slice_s*sizeof(T),
+                                 cudaMemcpyDeviceToDevice,
+                                 this->up_streams_.at(i)),
+                 "CudaMesh::switchHalosAsync - memcopyPeer i -> i+1");
+
+        cudasafe(cudaMemcpyAsync(d2, s2,
+                                 slice_s*sizeof(T),
+                                 cudaMemcpyDeviceToDevice,
+                                 this->down_streams_.at(i)),
+                 "CudaMesh::switchHalosAsync - memcopyPeer i+1 -> i");
+      }
+      else {
+        cudaMemcpyPeer(d1, dev_2, s1, dev_1, slice_s*sizeof(T));
+        cudaMemcpyPeer(d2, dev_1, s2, dev_2, slice_s*sizeof(T));
+      }
+    }
+  }
+
   template <typename T>
   T* getElementAt(unsigned int x, unsigned int y, unsigned int z, unsigned int partition) {
     T* ret;
@@ -709,11 +758,47 @@ public:
 
     this->position_idx_ptr_.clear();
     this->material_idx_ptr_.clear();
-
+    
+    this->number_of_partitions_ = number_of_partitions;
     // Go through devices and copy the part to each
     for(unsigned int k = 0; k < number_of_partitions; k ++) {
       int i = this->device_list_.at(k);
       cudaSetDevice(i);
+      // Init streams for kernels and memory transfers
+      cudaStream_t kernel_s;
+      cudaStream_t up_s;
+      cudaStream_t down_s;
+
+      cudaStreamCreate(&kernel_s);
+      cudaStreamCreate(&up_s);
+      cudaStreamCreate(&down_s);
+
+      this->kernel_streams_.push_back(kernel_s);
+      this->up_streams_.push_back(up_s);
+      this->down_streams_.push_back(down_s);
+      
+      if (k<number_of_partitions-1) {
+        int access = 0;
+        cudaDeviceCanAccessPeer(&access, i, this->device_list_.at(k+1));
+        this->peer_access_ = access;
+        if(access)
+          cudaDeviceEnablePeerAccess(this->device_list_.at(k+1), 0);
+
+        c_log_msg(LOG_INFO, "CudaMesh::makePartition - enabling peer access "
+                  "from device %u to %u, acceess: %u", this->device_list_.at(k),
+                  this->device_list_.at(k+1), access);
+      }
+      if (k>0) {
+        int access = 0;
+        cudaDeviceCanAccessPeer(&access, i, this->device_list_.at(k-1));
+        this->peer_access_ = access;
+        if (access)
+          cudaDeviceEnablePeerAccess(this->device_list_.at(k-1), 0);
+        c_log_msg(LOG_INFO, "CudaMesh::makePartition - enabling peer access "
+                  "from device %u to %u, acceess: %u", this->device_list_.at(k),
+                  this->device_list_.at(k-1), access);
+      }
+
       mesh_size_t offset = this->partition_indexing_.at(k).at(0)*this->getDimXY();
       mesh_size_t size = (mesh_size_t)this->partition_indexing_.at(k).size()*this->getDimXY();
 
@@ -822,10 +907,45 @@ public:
     this->position_idx_ptr_.clear();
     this->material_idx_ptr_.clear();
 
+    this->number_of_partitions_ = number_of_partitions;
+
     // Go through devices and copy the part to each
     for(unsigned int k = 0; k < number_of_partitions; k ++) {
       int i = this->device_list_.at(k);
       cudaSetDevice(i);
+
+      cudaStream_t kernel_s;
+      cudaStream_t up_s;
+      cudaStream_t down_s;
+      cudaStreamCreate(&kernel_s);
+      cudaStreamCreate(&up_s);
+      cudaStreamCreate(&down_s);
+
+      this->kernel_streams_.push_back(kernel_s);
+      this->up_streams_.push_back(up_s);
+      this->down_streams_.push_back(down_s);
+
+      if (k<number_of_partitions-1) {
+        int access = 0;
+        this->peer_access_ = access;
+        cudaDeviceCanAccessPeer(&access, i, this->device_list_.at(k+1));
+        if (access)
+          cudaDeviceEnablePeerAccess(this->device_list_.at(k+1), 0);
+        c_log_msg(LOG_INFO, "CudaMesh::makePartition - enabling peer access "
+                  "from device %u to %u, acceess: %u", this->device_list_.at(k),
+                  this->device_list_.at(k+1), access);
+      }
+      if (k>0) {
+        int access = 0;
+        this->peer_access_ = access;
+        cudaDeviceCanAccessPeer(&access, i, this->device_list_.at(k-1));
+        if (access)
+          cudaDeviceEnablePeerAccess(this->device_list_.at(k-1), 0);
+        c_log_msg(LOG_INFO, "CudaMesh::makePartition - enabling peer access "
+                  "from device %u to %u, acceess: %u", this->device_list_.at(k),
+                  this->device_list_.at(k-1), access);
+      }
+
       mesh_size_t offset = this->partition_indexing_.at(k).at(0)*this->getDimXY();
       mesh_size_t size = (mesh_size_t)this->partition_indexing_.at(k).size()*this->getDimXY();
 
@@ -907,6 +1027,19 @@ public:
       this->switchHalos(this->pressures_, this->partition_indexing_);
     }
     cudasafe(cudaDeviceSynchronize(), "CudaMesh::switchHalos - Device synch after halo switch");
+  }
+
+  void switchHalosAsync() {
+    // Asynch halo switch is done for past pointers as it is done before
+    // pointer switch
+    if (this->isDouble()) {
+      this->switchHalosAsync(this->pressures_past_double_, this->partition_indexing_);
+
+
+    }
+    else {
+      this->switchHalosAsync(this->pressures_past_, this->partition_indexing_);
+    }
   }
 
   /// \brief switch pointers of current and past pressure meshes
